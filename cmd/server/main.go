@@ -12,10 +12,11 @@ import (
 
 	mcpwebui "github.com/MegaGrindStone/mcp-web-ui"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/handlers"
+	"github.com/MegaGrindStone/mcp-web-ui/internal/services"
 )
 
 func main() {
-	h, err := handlers.NewHome()
+	h, err := handlers.NewHome(services.NewAnthropic(os.Getenv("ANTHROPIC_API_KEY"), "claude-3-5-sonnet-20241022", 1000))
 	if err != nil {
 		log.Fatal(err)
 	}

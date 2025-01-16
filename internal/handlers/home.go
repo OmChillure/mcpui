@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html/template"
+	"iter"
 	"log"
 	"net/http"
 	"slices"
@@ -14,11 +16,18 @@ import (
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	"github.com/google/uuid"
 	"github.com/tmaxmax/go-sse"
+	"github.com/yuin/goldmark"
 )
+
+type LLM interface {
+	Chat(ctx context.Context, messages []models.Message) iter.Seq2[string, error]
+}
 
 type Home struct {
 	sseSrv    *sse.Server
 	templates *template.Template
+
+	llm LLM
 }
 
 type homePageData struct {
@@ -36,7 +45,7 @@ var (
 
 var chats = []models.Chat{}
 
-func NewHome() (Home, error) {
+func NewHome(llm LLM) (Home, error) {
 	tmpl, err := template.ParseFS(
 		mcpwebui.TemplateFS,
 		"templates/layout/*.html",
@@ -65,6 +74,7 @@ func NewHome() (Home, error) {
 			},
 		},
 		templates: tmpl,
+		llm:       llm,
 	}, nil
 }
 
@@ -133,14 +143,13 @@ func (h Home) HandleChats(w http.ResponseWriter, r *http.Request) {
 		Timestamp: time.Now(),
 	}
 
+	aiMsgID := uuid.New().String()
 	aiMsg := models.Message{
-		ID:             uuid.New().String(),
-		Role:           "ai",
+		ID:             aiMsgID,
+		Role:           "assistant",
 		Timestamp:      time.Now(),
 		StreamingState: models.StreamingStateLoading,
 	}
-
-	messages := []models.Message{userMsg, aiMsg}
 
 	idx := slices.IndexFunc(chats, func(c models.Chat) bool {
 		return c.ID == chatID
@@ -150,44 +159,8 @@ func (h Home) HandleChats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chats[idx].Messages = append(chats[idx].Messages, messages...)
-
-	go func() {
-		chunks := []string{
-			"Hello! ",
-			"I'm your ",
-			"AI assistant. ",
-			"How can I ",
-			"help you today?",
-		}
-
-		msgIdx := len(chats[idx].Messages) - 1
-
-		time.Sleep(time.Second * 2)
-
-		for _, chunk := range chunks {
-			time.Sleep(time.Second * 1)
-
-			chats[idx].Messages[msgIdx].Content += chunk
-			content := chats[idx].Messages[msgIdx].Content
-			chats[idx].Messages[msgIdx].StreamingState = models.StreamingStateStreaming
-
-			msg := sse.Message{
-				Type: messagesSSEType,
-			}
-			msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", content))
-			msgID := chats[idx].Messages[msgIdx].ID
-
-			if err := h.sseSrv.Publish(&msg, messageIDTopic(msgID)); err != nil {
-				log.Printf("Failed to publish message: %v", err)
-				return
-			}
-		}
-
-		e := &sse.Message{Type: sse.Type("closeMessage")}
-		e.AppendData("bye")
-		_ = h.sseSrv.Publish(e)
-	}()
+	chats[idx].Messages = append(chats[idx].Messages, userMsg, aiMsg)
+	go h.chat(aiMsgID, idx, len(chats[idx].Messages)-1, chats[idx].Messages)
 
 	if isNewChat {
 		go h.generateChatTitle(chats[idx])
@@ -212,6 +185,44 @@ func (h Home) HandleChats(w http.ResponseWriter, r *http.Request) {
 	err = h.templates.ExecuteTemplate(w, "ai_message", aiMsg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (h Home) chat(aiMsgID string, chatIndex, msgIndex int, messages []models.Message) {
+	defer func() {
+		e := &sse.Message{Type: sse.Type("closeMessage")}
+		e.AppendData("bye")
+		_ = h.sseSrv.Publish(e)
+	}()
+
+	it := h.llm.Chat(context.Background(), messages)
+
+	fullMsg := ""
+	for aiMsg, err := range it {
+		msg := sse.Message{
+			Type: messagesSSEType,
+		}
+		if err != nil {
+			msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", err.Error()))
+			_ = h.sseSrv.Publish(&msg, messageIDTopic(aiMsgID))
+			return
+		}
+
+		buf := new(bytes.Buffer)
+		fullMsg += aiMsg
+
+		if err := goldmark.Convert([]byte(fullMsg), buf); err != nil {
+			log.Printf("Error converting markdown: %v", err)
+			return
+		}
+
+		chats[chatIndex].Messages[msgIndex].Content = fullMsg
+
+		msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", buf))
+		if err := h.sseSrv.Publish(&msg, messageIDTopic(aiMsgID)); err != nil {
+			log.Printf("Failed to publish message: %v", err)
+			return
+		}
 	}
 }
 
@@ -265,9 +276,23 @@ func (h Home) newChat() (string, error) {
 }
 
 func (h Home) generateChatTitle(chat models.Chat) {
-	time.Sleep(time.Second * 2)
+	var msgs []models.Message
+	msgs = append(msgs, models.Message{
+		Role:    "system",
+		Content: "Generate a title for this chat with only one sentence with maximum 5 words.",
+	})
+	msgs = append(msgs, chat.Messages...)
 
-	title := fmt.Sprintf("Chat %s", chat.ID)
+	it := h.llm.Chat(context.Background(), msgs)
+
+	title := ""
+	for msg, err := range it {
+		if err != nil {
+			log.Printf("Error generating chat title: %v", err)
+			return
+		}
+		title += msg
+	}
 
 	idx := slices.IndexFunc(chats, func(c models.Chat) bool {
 		return c.ID == chat.ID
