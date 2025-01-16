@@ -1,0 +1,24 @@
+{{define "welcome"}}
+<div class="card h-100">
+    <div class="card-body">
+        <h1>Hello there!</h1>
+    </div>
+    <!-- Message Input Form -->
+    <div class="card-footer">
+        <form class="d-flex gap-2" 
+              hx-post="/chats"
+              hx-target="#chat-container"
+              hx-swap="innerHTML"
+              hx-trigger="submit"
+              hx-on::after-request="this.reset()">
+            <input type="text" 
+                    class="form-control" 
+                    name="message"
+                    autocomplete="off"
+                    placeholder="Type your message..."
+                    required>
+            <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+</div>
+{{end}}

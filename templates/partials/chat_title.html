@@ -1,0 +1,8 @@
+{{define "chat_title"}}
+<a href="/?chat_id={{.ID}}" class="list-group-item list-group-item-action {{if .Active}}active{{end}}">
+    <div class="d-flex justify-content-between align-items-center">
+        <span>{{if .Title}}{{.Title}}{{else}}New Chat{{end}}</span>
+        <small class="text-muted">{{len .Messages}} messages</small>
+    </div>
+</a>
+{{end}}

@@ -31,13 +31,22 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
 	mux.HandleFunc("/", h.HandleHome)
-	mux.HandleFunc("/chat", h.HandleChat)
+	mux.HandleFunc("/chats", h.HandleChats)
+	mux.HandleFunc("/sse/messages", h.HandleSSE)
+	mux.HandleFunc("/sse/chats", h.HandleSSE)
 
 	// Create custom server
 	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
+		Addr:              ":8080",
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	srv.RegisterOnShutdown(func() {
+		if err := h.Shutdown(context.Background()); err != nil {
+			log.Printf("Failed to shutdown sse server: %v", err)
+		}
+	})
 
 	// Channel to listen for errors coming from the listener
 	serverErrors := make(chan error, 1)

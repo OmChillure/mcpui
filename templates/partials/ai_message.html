@@ -1,0 +1,36 @@
+{{define "ai_message"}}
+<div class="message mb-3">
+    <div class="d-flex align-items-start gap-2">
+        <div class="avatar">
+            <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                <small class="text-white">AI</small>
+            </div>
+        </div>
+        
+        <div class="message-content">
+            <div class="message-bubble p-3 rounded-3 bg-light"
+                {{if or (eq .StreamingState "streaming") (eq .StreamingState "loading")}}
+                    hx-ext="sse"
+                    sse-connect="/sse/messages?message_id={{.ID}}"
+                    sse-close="closeMessage"
+                    sse-swap="messages"
+                    hx-swap="innerHTML"
+                {{end}}>
+                {{if eq .StreamingState "loading"}}
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <span class="text-secondary">AI is thinking...</span>
+                    </div>
+                {{else}}
+                    <p class="mb-0">{{.Content}}</p>
+                {{end}}
+            </div>
+            <div class="message-meta mt-1">
+                <small class="text-muted">{{.Timestamp.Format "15:04"}}</small>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

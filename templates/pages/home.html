@@ -2,45 +2,32 @@
 
 {{define "content"}}
 <div class="container-fluid vh-100 py-3">
-    <!-- Chat Messages Container -->
     <div class="row h-100">
-        <div class="col-12 col-md-12 mx-auto h-100">
+        <!-- List Chats -->
+        <div class="col-3 h-100">
             <div class="card h-100">
-                <div class="card-body chat-container overflow-auto">
-                    {{range .Messages}}
-                        {{template "chat_message" .}}
-                    {{end}}
-                    <!-- HTMX Loading Indicator -->
-                    <div class="htmx-indicator d-flex justify-content-center py-3">
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                    </div>
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Chats</h5>
                 </div>
-                <!-- Message Input Form -->
-                <div class="card-footer">
-                    <form class="d-flex gap-2" 
-                          hx-post="/chat"
-                          hx-trigger="submit"
-                          hx-swap="beforeend"
-                          hx-target=".chat-container"
-                          hx-indicator=".htmx-indicator">
-                        <input type="text" 
-                               class="form-control" 
-                               name="message"
-                               autocomplete="off"
-                               placeholder="Type your message..."
-                               required>
-                        <button type="submit" 
-                                class="btn btn-primary">
-                            <span class="htmx-indicator-hide">Send</span>
-                            <span class="htmx-indicator-show d-none">
-                                <span class="spinner-border spinner-border-sm"></span>
-                            </span>
-                        </button>
-                    </form>
+                <div class="list-group list-group-flush overflow-auto"
+                    hx-ext="sse"
+                    sse-connect="/sse/chats"
+                    sse-close="closeChat"
+                    sse-swap="chats"
+                    hx-swap="innerHTML">
+                    {{range .Chats}}
+                      {{template "chat_title" .}}
+                    {{end}}
                 </div>
             </div>
+        </div>
+        <!-- Chat Messages Container -->
+        <div class="col-9 h-100" id="chat-container">
+            {{if .CurrentChatID}}
+              {{template "chatbox" .}}
+            {{else}}
+              {{template "welcome" .}}
+            {{end}}
         </div>
     </div>
 </div>

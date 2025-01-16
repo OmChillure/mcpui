@@ -1,0 +1,31 @@
+{{define "chatbox"}}
+<div class="card h-100">
+    <div class="card-body chat-container overflow-auto" id="chat-messages">
+        {{range .Messages}}
+            {{if eq .Role "user"}}
+                {{template "user_message" .}}
+            {{else}}
+                {{template "ai_message" .}}
+            {{end}}
+        {{end}}
+    </div>
+    <!-- Message Input Form -->
+    <div class="card-footer">
+        <form class="d-flex gap-2" 
+              hx-post="/chats"
+              hx-target="#chat-messages"
+              hx-swap="beforeend"
+              hx-trigger="submit"
+              hx-on::after-request="this.reset()">
+            <input type="text" 
+                    class="form-control" 
+                    name="message"
+                    autocomplete="off"
+                    placeholder="Type your message..."
+                    required>
+            <input type="hidden" name="chat_id" value="{{$.CurrentChatID}}">
+            <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+    </div>
+</div>
+{{end}}
