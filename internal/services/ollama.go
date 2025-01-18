@@ -12,6 +12,8 @@ import (
 	"github.com/ollama/ollama/api"
 )
 
+// Ollama provides an implementation of the LLM interface for interacting with Ollama's language models.
+// It manages connections to an Ollama server instance and handles streaming chat completions.
 type Ollama struct {
 	host  string
 	model string
@@ -19,6 +21,9 @@ type Ollama struct {
 	client *api.Client
 }
 
+// NewOllama creates a new Ollama instance with the specified host URL and model name. The host
+// parameter should be a valid URL pointing to an Ollama server. If the provided host URL is invalid,
+// the function will panic.
 func NewOllama(host, model string) Ollama {
 	u, err := url.Parse(host)
 	if err != nil {
@@ -32,6 +37,10 @@ func NewOllama(host, model string) Ollama {
 	}
 }
 
+// Chat implements the LLM interface by streaming responses from the Ollama model. It accepts a context
+// for cancellation and a slice of messages representing the conversation history. The function returns
+// an iterator that yields response chunks as strings and potential errors. The response is streamed
+// incrementally, allowing for real-time processing of model outputs.
 func (o Ollama) Chat(ctx context.Context, messages []models.Message) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		msgs := make([]api.Message, len(messages))

@@ -35,7 +35,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	h, err := handlers.NewHome(llm, boltDB)
+	m, err := handlers.NewMain(llm, boltDB)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,10 +50,10 @@ func main() {
 	// Create custom mux
 	mux := http.NewServeMux()
 	mux.Handle("/static/", http.StripPrefix("/static/", fileServer))
-	mux.HandleFunc("/", h.HandleHome)
-	mux.HandleFunc("/chats", h.HandleChats)
-	mux.HandleFunc("/sse/messages", h.HandleSSE)
-	mux.HandleFunc("/sse/chats", h.HandleSSE)
+	mux.HandleFunc("/", m.HandleHome)
+	mux.HandleFunc("/chats", m.HandleChats)
+	mux.HandleFunc("/sse/messages", m.HandleSSE)
+	mux.HandleFunc("/sse/chats", m.HandleSSE)
 
 	// Create custom server
 	srv := &http.Server{
@@ -63,7 +63,7 @@ func main() {
 	}
 
 	srv.RegisterOnShutdown(func() {
-		if err := h.Shutdown(context.Background()); err != nil {
+		if err := m.Shutdown(context.Background()); err != nil {
 			log.Printf("Failed to shutdown sse server: %v", err)
 		}
 	})

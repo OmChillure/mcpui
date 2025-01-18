@@ -15,6 +15,8 @@ import (
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 )
 
+// Anthropic provides an interface to the Anthropic API for large language model interactions. It implements
+// the LLM interface and handles streaming chat completions using Claude models.
 type Anthropic struct {
 	apiKey    string
 	model     string
@@ -37,14 +39,6 @@ type anthropicMessage struct {
 	Content string `json:"content"`
 }
 
-type anthropicChatResponse struct {
-	Content []anthropicContent `json:"content"`
-}
-
-type anthropicContent struct {
-	Text string `json:"text"`
-}
-
 type anthropicStreamResponse struct {
 	Type  string `json:"type"`
 	Delta struct {
@@ -56,6 +50,9 @@ const (
 	anthropicAPIEndpoint = "https://api.anthropic.com/v1"
 )
 
+// NewAnthropic creates a new Anthropic instance with the specified API key, model name, and maximum
+// token limit. It initializes an HTTP client for API communication and returns a configured Anthropic
+// instance ready for chat interactions.
 func NewAnthropic(apiKey, model string, maxTokens int) Anthropic {
 	return Anthropic{
 		apiKey:    apiKey,
@@ -77,6 +74,9 @@ func extractSystemMessage(messages []models.Message) (string, []models.Message) 
 	return "", messages
 }
 
+// Chat streams responses from the Anthropic API for a given sequence of messages. It processes system
+// messages separately and returns an iterator that yields response chunks and potential errors. The
+// context can be used to cancel ongoing requests. Refer to models.Message for message structure details.
 func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		systemMessage, ms := extractSystemMessage(messages)
@@ -103,7 +103,8 @@ func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", anthropicAPIEndpoint+"/messages", bytes.NewBuffer(jsonBody))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			anthropicAPIEndpoint+"/messages", bytes.NewBuffer(jsonBody))
 		if err != nil {
 			yield("", fmt.Errorf("error creating request: %w", err))
 			return
