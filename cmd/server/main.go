@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,7 +18,24 @@ import (
 )
 
 func main() {
-	h, err := handlers.NewHome(services.NewAnthropic(os.Getenv("ANTHROPIC_API_KEY"), "claude-3-5-sonnet-20241022", 1000))
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatal(fmt.Errorf("error getting user config dir: %w", err))
+	}
+	cfgPath := filepath.Join(cfgDir, "/mcpwebui")
+	if err := os.MkdirAll(cfgPath, 0755); err != nil {
+		log.Fatal(fmt.Errorf("error creating config directory: %w", err))
+	}
+
+	dbPath := filepath.Join(cfgDir, "/mcpwebui/store.db")
+
+	llm := services.NewAnthropic(os.Getenv("ANTHROPIC_API_KEY"), "claude-3-5-sonnet-20241022", 1000)
+	boltDB, err := services.NewBoltDB(dbPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	h, err := handlers.NewHome(llm, boltDB)
 	if err != nil {
 		log.Fatal(err)
 	}

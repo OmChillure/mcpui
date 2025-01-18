@@ -23,11 +23,22 @@ type LLM interface {
 	Chat(ctx context.Context, messages []models.Message) iter.Seq2[string, error]
 }
 
+type Store interface {
+	Chats(ctx context.Context) ([]models.Chat, error)
+	AddChat(ctx context.Context, chat models.Chat) (string, error)
+	SetChatTitle(ctx context.Context, chatID string, title string) error
+
+	Messages(ctx context.Context, chatID string) ([]models.Message, error)
+	AddMessages(ctx context.Context, chatID string, messages []models.Message) error
+	UpdateMessage(ctx context.Context, chatID string, message models.Message) error
+}
+
 type Home struct {
 	sseSrv    *sse.Server
 	templates *template.Template
 
-	llm LLM
+	llm   LLM
+	store Store
 }
 
 type homePageData struct {
@@ -36,16 +47,14 @@ type homePageData struct {
 	CurrentChatID string
 }
 
-const chatsTopic = "chats"
+const chatsSSETopic = "chats"
 
 var (
 	chatsSSEType    = sse.Type("chats")
 	messagesSSEType = sse.Type("messages")
 )
 
-var chats = []models.Chat{}
-
-func NewHome(llm LLM) (Home, error) {
+func NewHome(llm LLM, store Store) (Home, error) {
 	tmpl, err := template.ParseFS(
 		mcpwebui.TemplateFS,
 		"templates/layout/*.html",
@@ -59,7 +68,7 @@ func NewHome(llm LLM) (Home, error) {
 	return Home{
 		sseSrv: &sse.Server{
 			OnSession: func(s *sse.Session) (sse.Subscription, bool) {
-				topics := []string{sse.DefaultTopic, chatsTopic}
+				topics := []string{sse.DefaultTopic, chatsSSETopic}
 
 				messageID := s.Req.URL.Query().Get("message_id")
 				if messageID != "" {
@@ -75,6 +84,7 @@ func NewHome(llm LLM) (Home, error) {
 		},
 		templates: tmpl,
 		llm:       llm,
+		store:     store,
 	}, nil
 }
 
@@ -83,6 +93,12 @@ func messageIDTopic(messageID string) string {
 }
 
 func (h Home) HandleHome(w http.ResponseWriter, r *http.Request) {
+	chats, err := h.store.Chats(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	for i := range chats {
 		chats[i].Active = false
 	}
@@ -95,9 +111,16 @@ func (h Home) HandleHome(w http.ResponseWriter, r *http.Request) {
 			return c.ID == currentChatID
 		})
 		if idx >= 0 {
-			messages = chats[idx].Messages
 			chats[idx].Active = true
 		}
+		messages, err = h.store.Messages(r.Context(), currentChatID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	for i := range messages {
+		messages[i].StreamingState = models.StreamingStateEnded
 	}
 	data := homePageData{
 		Chats:         chats,
@@ -105,8 +128,7 @@ func (h Home) HandleHome(w http.ResponseWriter, r *http.Request) {
 		CurrentChatID: currentChatID,
 	}
 
-	err := h.templates.ExecuteTemplate(w, "home.html", data)
-	if err != nil {
+	if err := h.templates.ExecuteTemplate(w, "home.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -138,36 +160,39 @@ func (h Home) HandleChats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userMsg := models.Message{
+		ID:        uuid.New().String(),
 		Role:      "user",
 		Content:   message,
 		Timestamp: time.Now(),
 	}
 
-	aiMsgID := uuid.New().String()
 	aiMsg := models.Message{
-		ID:             aiMsgID,
+		ID:             uuid.New().String(),
 		Role:           "assistant",
 		Timestamp:      time.Now(),
 		StreamingState: models.StreamingStateLoading,
 	}
 
-	idx := slices.IndexFunc(chats, func(c models.Chat) bool {
-		return c.ID == chatID
-	})
-	if idx < 0 {
-		http.Error(w, "Chat not found", http.StatusNotFound)
+	if err := h.store.AddMessages(r.Context(), chatID, []models.Message{userMsg, aiMsg}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	messages, err := h.store.Messages(r.Context(), chatID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	userMsg = messages[len(messages)-2]
+	aiMsg = messages[len(messages)-1]
 
-	chats[idx].Messages = append(chats[idx].Messages, userMsg, aiMsg)
-	go h.chat(aiMsgID, idx, len(chats[idx].Messages)-1, chats[idx].Messages)
+	go h.chat(chatID, messages)
 
 	if isNewChat {
-		go h.generateChatTitle(chats[idx])
+		go h.generateChatTitle(chatID, messages)
 
 		data := homePageData{
 			CurrentChatID: chatID,
-			Messages:      chats[idx].Messages,
+			Messages:      messages,
 		}
 		err = h.templates.ExecuteTemplate(w, "chatbox", data)
 		if err != nil {
@@ -185,44 +210,6 @@ func (h Home) HandleChats(w http.ResponseWriter, r *http.Request) {
 	err = h.templates.ExecuteTemplate(w, "ai_message", aiMsg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func (h Home) chat(aiMsgID string, chatIndex, msgIndex int, messages []models.Message) {
-	defer func() {
-		e := &sse.Message{Type: sse.Type("closeMessage")}
-		e.AppendData("bye")
-		_ = h.sseSrv.Publish(e)
-	}()
-
-	it := h.llm.Chat(context.Background(), messages)
-
-	fullMsg := ""
-	for aiMsg, err := range it {
-		msg := sse.Message{
-			Type: messagesSSEType,
-		}
-		if err != nil {
-			msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", err.Error()))
-			_ = h.sseSrv.Publish(&msg, messageIDTopic(aiMsgID))
-			return
-		}
-
-		buf := new(bytes.Buffer)
-		fullMsg += aiMsg
-
-		if err := goldmark.Convert([]byte(fullMsg), buf); err != nil {
-			log.Printf("Error converting markdown: %v", err)
-			return
-		}
-
-		chats[chatIndex].Messages[msgIndex].Content = fullMsg
-
-		msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", buf))
-		if err := h.sseSrv.Publish(&msg, messageIDTopic(aiMsgID)); err != nil {
-			log.Printf("Failed to publish message: %v", err)
-			return
-		}
 	}
 }
 
@@ -249,16 +236,17 @@ func (h Home) Shutdown(ctx context.Context) error {
 }
 
 func (h Home) newChat() (string, error) {
-	for i := range chats {
-		chats[i].Active = false
-	}
 	newChat := models.Chat{
 		ID:     uuid.New().String(),
 		Active: true,
 	}
-	chats = append(chats, newChat)
+	newChatID, err := h.store.AddChat(context.Background(), newChat)
+	if err != nil {
+		return "", fmt.Errorf("failed to add chat: %w", err)
+	}
+	newChat.ID = newChatID
 
-	divs, err := h.chatDivs()
+	divs, err := h.chatDivs(newChat.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create chat divs: %w", err)
 	}
@@ -268,20 +256,68 @@ func (h Home) newChat() (string, error) {
 	}
 	msg.AppendData(divs)
 
-	if err := h.sseSrv.Publish(&msg, chatsTopic); err != nil {
+	if err := h.sseSrv.Publish(&msg, chatsSSETopic); err != nil {
 		return "", fmt.Errorf("failed to publish chats: %w", err)
 	}
 
 	return newChat.ID, nil
 }
 
-func (h Home) generateChatTitle(chat models.Chat) {
+func (h Home) chat(chatID string, messages []models.Message) {
+	defer func() {
+		e := &sse.Message{Type: sse.Type("closeMessage")}
+		e.AppendData("bye")
+		_ = h.sseSrv.Publish(e)
+	}()
+
+	aiMsg := messages[len(messages)-1]
+
+	it := h.llm.Chat(context.Background(), messages)
+
+	for streamMsg, err := range it {
+		msg := sse.Message{
+			Type: messagesSSEType,
+		}
+		if err != nil {
+			msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", err.Error()))
+			_ = h.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID))
+			return
+		}
+
+		buf := new(bytes.Buffer)
+		aiMsg.Content += streamMsg
+
+		if err := goldmark.Convert([]byte(aiMsg.Content), buf); err != nil {
+			log.Printf("Error converting markdown: %v", err)
+			return
+		}
+
+		if err := h.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
+			log.Printf("Failed to save message content: %v", err)
+			return
+		}
+
+		msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", buf))
+		if err := h.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
+			log.Printf("Failed to publish message: %v", err)
+			return
+		}
+	}
+
+	aiMsg.StreamingState = models.StreamingStateEnded
+	if err := h.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
+		log.Printf("Failed to save message content: %v", err)
+		return
+	}
+}
+
+func (h Home) generateChatTitle(chatID string, messages []models.Message) {
 	var msgs []models.Message
 	msgs = append(msgs, models.Message{
 		Role:    "system",
 		Content: "Generate a title for this chat with only one sentence with maximum 5 words.",
 	})
-	msgs = append(msgs, chat.Messages...)
+	msgs = append(msgs, messages...)
 
 	it := h.llm.Chat(context.Background(), msgs)
 
@@ -294,13 +330,12 @@ func (h Home) generateChatTitle(chat models.Chat) {
 		title += msg
 	}
 
-	idx := slices.IndexFunc(chats, func(c models.Chat) bool {
-		return c.ID == chat.ID
-	})
+	if err := h.store.SetChatTitle(context.Background(), chatID, title); err != nil {
+		log.Printf("Failed to set chat title: %v", err)
+		return
+	}
 
-	chats[idx].Title = title
-
-	divs, err := h.chatDivs()
+	divs, err := h.chatDivs(chatID)
 	if err != nil {
 		log.Printf("Failed to generate chat title: %v", err)
 		return
@@ -310,14 +345,20 @@ func (h Home) generateChatTitle(chat models.Chat) {
 		Type: chatsSSEType,
 	}
 	msg.AppendData(divs)
-	if err := h.sseSrv.Publish(&msg, chatsTopic); err != nil {
+	if err := h.sseSrv.Publish(&msg, chatsSSETopic); err != nil {
 		log.Printf("Failed to publish chats: %v", err)
 	}
 }
 
-func (h Home) chatDivs() (string, error) {
+func (h Home) chatDivs(activeID string) (string, error) {
+	chats, err := h.store.Chats(context.Background())
+	if err != nil {
+		return "", fmt.Errorf("failed to get chats: %w", err)
+	}
+
 	var sb strings.Builder
 	for _, chat := range chats {
+		chat.Active = chat.ID == activeID
 		err := h.templates.ExecuteTemplate(&sb, "chat_title", chat)
 		if err != nil {
 			return "", fmt.Errorf("failed to execute chat_title template: %w", err)
