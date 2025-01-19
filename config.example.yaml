@@ -1,0 +1,10 @@
+port: 8080
+# Choose one of the following LLM providers: ollama, anthropic
+llm:
+  provider: ollama
+  model: claude-3-5-sonnet-20241022
+  # ollama
+  host: http://localhost:11434 # Default to environment variable OLLAMA_HOST
+  # anthropic
+  api_key: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
+  max_tokens: 1000

@@ -15,6 +15,7 @@ import (
 	mcpwebui "github.com/MegaGrindStone/mcp-web-ui"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/handlers"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/services"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -27,23 +28,37 @@ func main() {
 		log.Fatal(fmt.Errorf("error creating config directory: %w", err))
 	}
 
-	dbPath := filepath.Join(cfgDir, "/mcpwebui/store.db")
+	cfgFilePath := filepath.Join(cfgDir, "/mcpwebui/config.yaml")
+	cfgFile, err := os.Open(cfgFilePath)
+	if err != nil {
+		log.Fatal(fmt.Errorf("error opening config file: %w", err))
+	}
+	defer cfgFile.Close()
 
-	llm := services.NewAnthropic(os.Getenv("ANTHROPIC_API_KEY"), "claude-3-5-sonnet-20241022", 1000)
+	cfg := config{}
+	if err := yaml.NewDecoder(cfgFile).Decode(&cfg); err != nil {
+		panic(fmt.Errorf("error decoding config file: %w", err))
+	}
+	llm, err := cfg.LLM.LLM()
+	if err != nil {
+		panic(err)
+	}
+
+	dbPath := filepath.Join(cfgDir, "/mcpwebui/store.db")
 	boltDB, err := services.NewBoltDB(dbPath)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	m, err := handlers.NewMain(llm, boltDB)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	// Serve static files
 	staticFS, err := fs.Sub(mcpwebui.StaticFS, "static")
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	fileServer := http.FileServer(http.FS(staticFS))
 
@@ -57,7 +72,7 @@ func main() {
 
 	// Create custom server
 	srv := &http.Server{
-		Addr:              ":8080",
+		Addr:              ":" + cfg.Port,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -73,7 +88,7 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Println("Server starting on :8080")
+		log.Println("Server starting on :" + cfg.Port)
 		serverErrors <- srv.ListenAndServe()
 	}()
 

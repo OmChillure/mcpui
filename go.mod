@@ -8,9 +8,10 @@ require (
 	github.com/tmaxmax/go-sse v0.10.0
 )
 
-require github.com/yuin/goldmark v1.7.8
-
 require (
-	go.etcd.io/bbolt v1.3.11 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	github.com/yuin/goldmark v1.7.8
+	go.etcd.io/bbolt v1.3.11
+	gopkg.in/yaml.v3 v3.0.1
 )
+
+require golang.org/x/sys v0.28.0 // indirect
