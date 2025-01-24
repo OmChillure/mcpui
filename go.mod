@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/MegaGrindStone/go-mcp v0.4.2
 	github.com/yuin/goldmark v1.7.8
 	go.etcd.io/bbolt v1.3.11
 	gopkg.in/yaml.v3 v3.0.1

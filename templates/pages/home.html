@@ -3,9 +3,9 @@
 {{define "content"}}
 <div class="container-fluid vh-100 py-3">
     <div class="row h-100">
-        <!-- List Chats -->
         <div class="col-3 h-100">
-            <div class="card h-100">
+            <!-- List Chats -->
+            <div class="card h-50 mb-2">
                 <div class="card-header">
                     <h5 class="card-title mb-0">Chats</h5>
                 </div>
@@ -20,6 +20,102 @@
                     {{end}}
                 </div>
             </div>
+            <!-- MCP Container -->
+            <div class="card h-50 mb-2">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">MCP</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="accordion" id="mcpAccordion">
+                        <!-- List Servers -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                                    Servers
+                                </button>
+                            </h2>
+                            <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#mcpAccordion">
+                                <div class="accordion-body">
+                                    <div class="list-group list-group-flush">
+                                        {{range .Servers}}
+                                        <div class="list-group-item" role="button" style="cursor: pointer" 
+                                            onclick="showServerModal('{{.Name}}')">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span>{{.Name}}</span>
+                                                <span class="badge bg-secondary">{{.Version}}</span>
+                                            </div>
+                                        </div>
+                                        {{end}}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- List Tools -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="true" aria-controls="collapseOne">
+                                    Tools
+                                </button>
+                            </h2>
+                            <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#mcpAccordion">
+                                <div class="accordion-body">
+                                    <div class="list-group list-group-flush">
+                                        {{range .Tools}}
+                                        <div class="list-group-item" role="button" style="cursor: pointer">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span>{{.Name}}</span>
+                                            </div>
+                                        </div>
+                                        {{end}}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- List Resources -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseTwo">
+                                    Resources
+                                </button>
+                            </h2>
+                            <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#mcpAccordion">
+                                <div class="accordion-body">
+                                    <div class="list-group list-group-flush">
+                                        {{range .Resources}}
+                                        <div class="list-group-item" role="button" style="cursor: pointer">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span>{{.Name}}</span>
+                                            </div>
+                                        </div>
+                                        {{end}}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- List Prompts -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFour" aria-expanded="false" aria-controls="collapseThree">
+                                    Prompts
+                                </button>
+                            </h2>
+                            <div id="collapseFour" class="accordion-collapse collapse" data-bs-parent="#mcpAccordion">
+                                <div class="accordion-body">
+                                    <div class="list-group list-group-flush">
+                                        {{range .Prompts}}
+                                        <div class="list-group-item" role="button" style="cursor: pointer">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span>{{.Name}}</span>
+                                            </div>
+                                        </div>
+                                        {{end}}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <!-- Chat Messages Container -->
         <div class="col-9 h-100" id="chat-container">
@@ -31,4 +127,30 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="serverModal" tabindex="-1" aria-labelledby="serverModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="serverModalLabel">Server Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="serverModalText"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showServerModal(serverName) {
+    const modalText = document.getElementById('serverModalText');
+    modalText.textContent = `Server: ${serverName}`;
+    const modal = new bootstrap.Modal(document.getElementById('serverModal'));
+    modal.show();
+}
+</script>
 {{end}}

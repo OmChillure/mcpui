@@ -7,6 +7,7 @@ import (
 	"iter"
 	"time"
 
+	"github.com/MegaGrindStone/go-mcp"
 	mcpwebui "github.com/MegaGrindStone/mcp-web-ui"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	"github.com/tmaxmax/go-sse"
@@ -39,6 +40,11 @@ type Main struct {
 
 	llm   LLM
 	store Store
+
+	servers   []mcp.Info
+	tools     []mcp.Tool
+	resources []mcp.Resource
+	prompts   []mcp.Prompt
 }
 
 const chatsSSETopic = "chats"
@@ -46,7 +52,7 @@ const chatsSSETopic = "chats"
 // NewMain creates a new Main instance with the provided LLM and Store implementations. It initializes
 // the SSE server with default configurations and parses the required HTML templates from the embedded
 // filesystem. The SSE server is configured to handle both default events and chat-specific topics.
-func NewMain(llm LLM, store Store) (Main, error) {
+func NewMain(llm LLM, store Store, mcpClients []*mcp.Client) (Main, error) {
 	// We parse templates from three distinct directories to separate layout, pages, and partial views
 	tmpl, err := template.ParseFS(
 		mcpwebui.TemplateFS,
@@ -56,6 +62,46 @@ func NewMain(llm LLM, store Store) (Main, error) {
 	)
 	if err != nil {
 		return Main{}, err
+	}
+
+	servers := make([]mcp.Info, len(mcpClients))
+	tools := make([]mcp.Tool, 0, len(mcpClients))
+	resources := make([]mcp.Resource, 0, len(mcpClients))
+	prompts := make([]mcp.Prompt, 0, len(mcpClients))
+	for i := range mcpClients {
+		servers[i] = mcpClients[i].ServerInfo()
+		serverName := servers[i].Name
+
+		var ts []mcp.Tool
+		if mcpClients[i].ToolServerSupported() {
+			listTools, err := mcpClients[i].ListTools(context.Background(), mcp.ListToolsParams{})
+			if err != nil {
+				return Main{}, fmt.Errorf("failed to list tools from server %s: %w", serverName, err)
+			}
+			ts = listTools.Tools
+		}
+
+		var rs []mcp.Resource
+		if mcpClients[i].ResourceServerSupported() {
+			listResources, err := mcpClients[i].ListResources(context.Background(), mcp.ListResourcesParams{})
+			if err != nil {
+				return Main{}, fmt.Errorf("failed to list resources from server %s: %w", serverName, err)
+			}
+			rs = listResources.Resources
+		}
+
+		var ps []mcp.Prompt
+		if mcpClients[i].PromptServerSupported() {
+			listPrompts, err := mcpClients[i].ListPrompts(context.Background(), mcp.ListPromptsParams{})
+			if err != nil {
+				return Main{}, fmt.Errorf("failed to list prompts from server %s: %w", serverName, err)
+			}
+			ps = listPrompts.Prompts
+		}
+
+		tools = append(tools, ts...)
+		resources = append(resources, rs...)
+		prompts = append(prompts, ps...)
 	}
 
 	return Main{
@@ -80,6 +126,10 @@ func NewMain(llm LLM, store Store) (Main, error) {
 		templates: tmpl,
 		llm:       llm,
 		store:     store,
+		servers:   servers,
+		tools:     tools,
+		resources: resources,
+		prompts:   prompts,
 	}, nil
 }
 

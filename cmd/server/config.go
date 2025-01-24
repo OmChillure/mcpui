@@ -10,7 +10,7 @@ import (
 )
 
 type llmConfig interface {
-	LLM() (handlers.LLM, error)
+	llm() (handlers.LLM, error)
 }
 
 // BaseLLMConfig contains the common fields for all LLM configurations.
@@ -20,8 +20,10 @@ type BaseLLMConfig struct {
 }
 
 type config struct {
-	Port string    `yaml:"port"`
-	LLM  llmConfig `yaml:"llm"`
+	Port            string                          `yaml:"port"`
+	LLM             llmConfig                       `yaml:"llm"`
+	MCPSSEServers   map[string]mcpSSEServerConfig   `yaml:"mcpSSEServers"`
+	MCPStdIOServers map[string]mcpStdIOServerConfig `yaml:"mcpStdIOServers"`
 }
 
 type ollamaConfig struct {
@@ -31,14 +33,25 @@ type ollamaConfig struct {
 
 type anthropicConfig struct {
 	BaseLLMConfig `yaml:",inline"`
-	APIKey        string `yaml:"api_key"`
-	MaxTokens     int    `yaml:"max_tokens"`
+	APIKey        string `yaml:"apiKey"`
+	MaxTokens     int    `yaml:"maxTokens"`
+}
+
+type mcpSSEServerConfig struct {
+	URL string `yaml:"url"`
+}
+
+type mcpStdIOServerConfig struct {
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args"`
 }
 
 func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	var rawConfig struct {
-		Port string         `yaml:"port"`
-		LLM  map[string]any `yaml:"llm"`
+		Port            string                          `yaml:"port"`
+		LLM             map[string]any                  `yaml:"llm"`
+		MCPSSEServers   map[string]mcpSSEServerConfig   `yaml:"mcpSSEServers"`
+		MCPStdIOServers map[string]mcpStdIOServerConfig `yaml:"mcpStdIOServers"`
 	}
 
 	if err := value.Decode(&rawConfig); err != nil {
@@ -72,11 +85,13 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	c.LLM = llm
+	c.MCPSSEServers = rawConfig.MCPSSEServers
+	c.MCPStdIOServers = rawConfig.MCPStdIOServers
 
 	return nil
 }
 
-func (o ollamaConfig) LLM() (handlers.LLM, error) {
+func (o ollamaConfig) llm() (handlers.LLM, error) {
 	if o.Model == "" {
 		return nil, fmt.Errorf("model is required")
 	}
@@ -88,7 +103,7 @@ func (o ollamaConfig) LLM() (handlers.LLM, error) {
 	return services.NewOllama(host, o.Model), nil
 }
 
-func (a anthropicConfig) LLM() (handlers.LLM, error) {
+func (a anthropicConfig) llm() (handlers.LLM, error) {
 	if a.Model == "" {
 		return nil, fmt.Errorf("model is required")
 	}

@@ -29,7 +29,7 @@ func TestNewMain(t *testing.T) {
 	llm := &mockLLM{}
 	store := &mockStore{}
 
-	main, err := handlers.NewMain(llm, store)
+	main, err := handlers.NewMain(llm, store, nil)
 	if err != nil {
 		t.Fatalf("NewMain() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestHandleHome(t *testing.T) {
 		},
 	}
 
-	main, err := handlers.NewMain(llm, store)
+	main, err := handlers.NewMain(llm, store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestHandleChats(t *testing.T) {
 		messages: map[string][]models.Message{},
 	}
 
-	main, err := handlers.NewMain(llm, store)
+	main, err := handlers.NewMain(llm, store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

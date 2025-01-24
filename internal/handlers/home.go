@@ -3,12 +3,19 @@ package handlers
 import (
 	"net/http"
 	"slices"
+
+	"github.com/MegaGrindStone/go-mcp"
 )
 
 type homePageData struct {
 	Chats         []chat
 	Messages      []message
 	CurrentChatID string
+
+	Servers   []mcp.Info
+	Tools     []mcp.Tool
+	Resources []mcp.Resource
+	Prompts   []mcp.Prompt
 }
 
 // HandleHome renders the home page template with chat and message data. It displays a list of available
@@ -67,6 +74,10 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 		Chats:         chats,
 		Messages:      messages,
 		CurrentChatID: currentChatID,
+		Servers:       m.servers,
+		Tools:         m.tools,
+		Resources:     m.resources,
+		Prompts:       m.prompts,
 	}
 
 	if err := m.templates.ExecuteTemplate(w, "home.html", data); err != nil {

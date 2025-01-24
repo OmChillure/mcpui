@@ -6,5 +6,12 @@ llm:
   # ollama
   host: http://localhost:11434 # Default to environment variable OLLAMA_HOST
   # anthropic
-  api_key: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
-  max_tokens: 1000
+  apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
+  maxTokens: 1000
+mcpStdIOServers:
+  filesystem:
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-filesystem"
+      - "/home/gs/repository/go-mcp"

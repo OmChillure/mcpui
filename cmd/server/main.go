@@ -7,11 +7,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/MegaGrindStone/go-mcp"
 	mcpwebui "github.com/MegaGrindStone/mcp-web-ui"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/handlers"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/services"
@@ -39,7 +41,7 @@ func main() {
 	if err := yaml.NewDecoder(cfgFile).Decode(&cfg); err != nil {
 		panic(fmt.Errorf("error decoding config file: %w", err))
 	}
-	llm, err := cfg.LLM.LLM()
+	llm, err := cfg.LLM.llm()
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +52,41 @@ func main() {
 		panic(err)
 	}
 
-	m, err := handlers.NewMain(llm, boltDB)
+	mcpClientInfo := mcp.Info{
+		Name:    "mcp-web-ui",
+		Version: "0.1.0",
+	}
+
+	mcpClients, stdIOCmds := populateMCPClients(cfg, mcpClientInfo)
+
+	var mcpCancels []context.CancelFunc
+	for i, cli := range mcpClients {
+		log.Printf("Connecting to MCP server at index %d", i)
+
+		connectCtx, connectCancel := context.WithCancel(context.Background())
+		mcpCancels = append(mcpCancels, connectCancel)
+
+		ready := make(chan struct{})
+		errs := make(chan error, 1)
+
+		go func() {
+			if err := cli.Connect(connectCtx, ready); err != nil {
+				errs <- err
+			}
+		}()
+
+		select {
+		case err := <-errs:
+			panic(err)
+		case <-ready:
+		}
+
+		mcpClients[i] = cli
+
+		log.Printf("Connected to MCP server %s", mcpClients[i].ServerInfo().Name)
+	}
+
+	m, err := handlers.NewMain(llm, boltDB, mcpClients)
 	if err != nil {
 		panic(err)
 	}
@@ -78,6 +114,15 @@ func main() {
 	}
 
 	srv.RegisterOnShutdown(func() {
+		for _, cancel := range mcpCancels {
+			cancel()
+		}
+		for _, stdIOCmd := range stdIOCmds {
+			if err := stdIOCmd.Wait(); err != nil {
+				log.Printf("Failed to wait for stdIO command: %v", err)
+			}
+		}
+
 		if err := m.Shutdown(context.Background()); err != nil {
 			log.Printf("Failed to shutdown sse server: %v", err)
 		}
@@ -116,4 +161,39 @@ func main() {
 			}
 		}
 	}
+}
+
+func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*exec.Cmd) {
+	var mcpClients []*mcp.Client
+
+	for _, mcpSSEServerConfig := range cfg.MCPSSEServers {
+		sseClient := mcp.NewSSEClient(mcpSSEServerConfig.URL, nil)
+		cli := mcp.NewClient(mcpClientInfo, sseClient)
+		mcpClients = append(mcpClients, cli)
+	}
+
+	var stdIOCmds []*exec.Cmd
+	for _, mcpStdIOServerConfig := range cfg.MCPStdIOServers {
+		cmd := exec.Command(mcpStdIOServerConfig.Command, mcpStdIOServerConfig.Args...)
+		stdIOCmds = append(stdIOCmds, cmd)
+
+		in, err := cmd.StdinPipe()
+		if err != nil {
+			panic(err)
+		}
+		out, err := cmd.StdoutPipe()
+		if err != nil {
+			panic(err)
+		}
+		if err := cmd.Start(); err != nil {
+			panic(err)
+		}
+
+		cliStdIO := mcp.NewStdIO(out, in)
+
+		cli := mcp.NewClient(mcpClientInfo, cliStdIO)
+		mcpClients = append(mcpClients, cli)
+	}
+
+	return mcpClients, stdIOCmds
 }

@@ -102,6 +102,10 @@ linters-settings:
         # Default: false
         strict: true
 
+  gosec:
+    excludes:
+      - G204
+
   nakedret:
     # Make an issue if func has more lines of code than this setting, and it has naked returns.
     # Default: 30
