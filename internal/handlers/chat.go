@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -12,7 +11,6 @@ import (
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	"github.com/google/uuid"
 	"github.com/tmaxmax/go-sse"
-	"github.com/yuin/goldmark"
 )
 
 type chat struct {
@@ -207,25 +205,19 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			Type: messagesSSEType,
 		}
 		if err != nil {
-			msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", err.Error()))
+			msg.AppendData(err.Error())
 			_ = m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID))
 			return
 		}
 
-		buf := new(bytes.Buffer)
 		aiMsg.Content += streamMsg
-
-		if err := goldmark.Convert([]byte(aiMsg.Content), buf); err != nil {
-			log.Printf("Error converting markdown: %v", err)
-			return
-		}
 
 		if err := m.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
 			log.Printf("Failed to save message content: %v", err)
 			return
 		}
 
-		msg.AppendData(fmt.Sprintf("<p class='mb-0'>%s</p>", buf))
+		msg.AppendData(fmt.Sprintf("<md-block>%s</md-block>", aiMsg.Content))
 		if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
 			log.Printf("Failed to publish message: %v", err)
 			return
