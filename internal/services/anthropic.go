@@ -1,18 +1,16 @@
 package services
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"iter"
 	"net/http"
-	"strings"
 
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
+	"github.com/tmaxmax/go-sse"
 )
 
 // Anthropic provides an interface to the Anthropic API for large language model interactions. It implements
@@ -44,6 +42,14 @@ type anthropicStreamResponse struct {
 	Delta struct {
 		Text string `json:"text"`
 	} `json:"delta"`
+}
+
+type anthropicError struct {
+	Type  string `json:"type"`
+	Error struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error"`
 }
 
 const (
@@ -124,47 +130,33 @@ func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			yield("", fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body)))
-			return
-		}
-
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				return
-			}
-
-			var streamResp anthropicStreamResponse
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				yield("", fmt.Errorf("error decoding response: %w", err))
-				return
-			}
-
-			if streamResp.Type == "content_block_delta" && streamResp.Delta.Text != "" {
-				if !yield(streamResp.Delta.Text, nil) {
-					return
-				}
-			}
-
-			if streamResp.Type == "message_stop" {
-				return
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			if !errors.Is(err, context.Canceled) {
+		for ev, err := range sse.Read(resp.Body, nil) {
+			if err != nil {
 				yield("", fmt.Errorf("error reading response: %w", err))
+				return
+			}
+			switch ev.Type {
+			case "error":
+				var e anthropicError
+				if err := json.Unmarshal([]byte(ev.Data), &e); err != nil {
+					yield("", fmt.Errorf("error unmarshaling error: %w", err))
+					return
+				}
+				yield("", fmt.Errorf("anthropic error %s: %s", e.Error.Type, e.Error.Message))
+				return
+			case "message_stop":
+				return
+			case "content_block_delta":
+				var res anthropicStreamResponse
+				if err := json.Unmarshal([]byte(ev.Data), &res); err != nil {
+					yield("", fmt.Errorf("error unmarshaling response: %w", err))
+					return
+				}
+				if !yield(res.Delta.Text, nil) {
+					return
+				}
+			default:
+				continue
 			}
 		}
 	}
