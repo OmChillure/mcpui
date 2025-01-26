@@ -14,6 +14,7 @@
                     sse-connect="/sse/messages?message_id={{.ID}}"
                     sse-close="closeMessage"
                     sse-swap="messages"
+                    hx-on::after-sse="document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight"
                     hx-swap="innerHTML"
                 {{end}}>
                 {{if eq .StreamingState "loading"}}

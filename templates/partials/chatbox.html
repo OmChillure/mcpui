@@ -1,6 +1,6 @@
 {{define "chatbox"}}
 <div class="card h-100">
-    <div class="card-body chat-container overflow-auto" id="chat-messages">
+    <div class="card-body chat-container overflow-auto" id="chat-messages" style="scroll-behavior: smooth;">
         {{range .Messages}}
             {{if eq .Role "user"}}
                 {{template "user_message" .}}
@@ -16,7 +16,7 @@
               hx-target="#chat-messages"
               hx-swap="beforeend"
               hx-trigger="submit"
-              hx-on::after-request="this.reset()">
+              hx-on::after-request="this.reset(); document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight">
             <input type="text" 
                     class="form-control" 
                     name="message"
