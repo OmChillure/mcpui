@@ -8,7 +8,7 @@
         </div>
         
         <div class="message-content">
-            <div class="message-bubble p-3 rounded-3 bg-light"
+            <div class="message-bubble p-3 rounded-3 bg-dark-subtle text-emphasis-dark"
                 {{if or (eq .StreamingState "streaming") (eq .StreamingState "loading")}}
                     hx-ext="sse"
                     sse-connect="/sse/messages?message_id={{.ID}}"
