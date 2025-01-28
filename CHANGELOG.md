@@ -14,3 +14,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration file for LLM provider.
 - Bolt DB for chat and message persistence.
 - List MCP objects (servers, tools, resources, prompts) in the UI.
+- Customizable system and title generation prompts.

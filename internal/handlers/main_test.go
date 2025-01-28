@@ -29,7 +29,7 @@ func TestNewMain(t *testing.T) {
 	llm := &mockLLM{}
 	store := &mockStore{}
 
-	main, err := handlers.NewMain(llm, store, nil)
+	main, err := handlers.NewMain(llm, llm, store, nil)
 	if err != nil {
 		t.Fatalf("NewMain() error = %v", err)
 	}
@@ -55,7 +55,7 @@ func TestHandleHome(t *testing.T) {
 		},
 	}
 
-	main, err := handlers.NewMain(llm, store, nil)
+	main, err := handlers.NewMain(llm, llm, store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestHandleChats(t *testing.T) {
 		messages: map[string][]models.Message{},
 	}
 
-	main, err := handlers.NewMain(llm, store, nil)
+	main, err := handlers.NewMain(llm, llm, store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestHandleChats(t *testing.T) {
 	}
 }
 
-func (m mockLLM) Chat(_ context.Context, _ string, _ []models.Message) iter.Seq2[models.Content, error] {
+func (m mockLLM) Chat(_ context.Context, _ []models.Message) iter.Seq2[models.Content, error] {
 	return func(yield func(models.Content, error) bool) {
 		if m.err != nil {
 			yield(models.Content{}, m.err)
@@ -174,6 +174,10 @@ func (m mockLLM) Chat(_ context.Context, _ string, _ []models.Message) iter.Seq2
 			}
 		}
 	}
+}
+
+func (m mockLLM) GenerateTitle(_ context.Context, _ string) (string, error) {
+	return "Test Chat", nil
 }
 
 func (m *mockStore) Chats(_ context.Context) ([]models.Chat, error) {

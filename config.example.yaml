@@ -1,4 +1,6 @@
 port: 8080
+systemPrompt: You are a helpful assistant.
+titleGeneratorPrompt: Generate a title for this chat with only one sentence with maximum 5 words.
 # Choose one of the following LLM providers: ollama, anthropic
 llm:
   provider: ollama

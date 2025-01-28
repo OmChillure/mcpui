@@ -16,7 +16,12 @@ import (
 // LLM represents a large language model interface that provides chat functionality. It accepts a context
 // and a sequence of messages, returning an iterator that yields response chunks and potential errors.
 type LLM interface {
-	Chat(ctx context.Context, systemMessage string, messages []models.Message) iter.Seq2[models.Content, error]
+	Chat(ctx context.Context, messages []models.Message) iter.Seq2[models.Content, error]
+}
+
+// TitleGenerator represents a title generator interface that generates a title for a given message.
+type TitleGenerator interface {
+	GenerateTitle(ctx context.Context, message string) (string, error)
 }
 
 // Store defines the interface for managing chat and message persistence. It provides methods for
@@ -38,8 +43,9 @@ type Main struct {
 	sseSrv    *sse.Server
 	templates *template.Template
 
-	llm   LLM
-	store Store
+	llm            LLM
+	titleGenerator TitleGenerator
+	store          Store
 
 	mcpClients []*mcp.Client
 
@@ -56,7 +62,7 @@ const chatsSSETopic = "chats"
 // NewMain creates a new Main instance with the provided LLM and Store implementations. It initializes
 // the SSE server with default configurations and parses the required HTML templates from the embedded
 // filesystem. The SSE server is configured to handle both default events and chat-specific topics.
-func NewMain(llm LLM, store Store, mcpClients []*mcp.Client) (Main, error) {
+func NewMain(llm LLM, titleGen TitleGenerator, store Store, mcpClients []*mcp.Client) (Main, error) {
 	// We parse templates from three distinct directories to separate layout, pages, and partial views
 	tmpl, err := template.ParseFS(
 		mcpwebui.TemplateFS,
@@ -131,15 +137,16 @@ func NewMain(llm LLM, store Store, mcpClients []*mcp.Client) (Main, error) {
 				}, true
 			},
 		},
-		templates:  tmpl,
-		llm:        llm,
-		store:      store,
-		mcpClients: mcpClients,
-		toolsMap:   tm,
-		servers:    servers,
-		tools:      tools,
-		resources:  resources,
-		prompts:    prompts,
+		templates:      tmpl,
+		llm:            llm,
+		titleGenerator: titleGen,
+		store:          store,
+		mcpClients:     mcpClients,
+		toolsMap:       tm,
+		servers:        servers,
+		tools:          tools,
+		resources:      resources,
+		prompts:        prompts,
 	}, nil
 }
 

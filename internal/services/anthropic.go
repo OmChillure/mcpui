@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
 	"net/http"
 
@@ -16,9 +17,10 @@ import (
 // Anthropic provides an interface to the Anthropic API for large language model interactions. It implements
 // the LLM interface and handles streaming chat completions using Claude models.
 type Anthropic struct {
-	apiKey    string
-	model     string
-	maxTokens int
+	apiKey       string
+	model        string
+	maxTokens    int
+	systemPrompt string
 
 	client *http.Client
 }
@@ -74,25 +76,22 @@ const (
 // NewAnthropic creates a new Anthropic instance with the specified API key, model name, and maximum
 // token limit. It initializes an HTTP client for API communication and returns a configured Anthropic
 // instance ready for chat interactions.
-func NewAnthropic(apiKey, model string, maxTokens int) Anthropic {
+func NewAnthropic(apiKey, model, systemPrompt string, maxTokens int) Anthropic {
 	return Anthropic{
-		apiKey:    apiKey,
-		model:     model,
-		maxTokens: maxTokens,
-		client:    &http.Client{},
+		apiKey:       apiKey,
+		model:        model,
+		maxTokens:    maxTokens,
+		systemPrompt: systemPrompt,
+		client:       &http.Client{},
 	}
 }
 
 // Chat streams responses from the Anthropic API for a given sequence of messages. It processes system
 // messages separately and returns an iterator that yields response chunks and potential errors. The
 // context can be used to cancel ongoing requests. Refer to models.Message for message structure details.
-func (a Anthropic) Chat(
-	ctx context.Context,
-	systemMessage string,
-	messages []models.Message,
-) iter.Seq2[models.Content, error] {
+func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq2[models.Content, error] {
 	return func(yield func(models.Content, error) bool) {
-		resp, err := a.doRequest(ctx, systemMessage, messages)
+		resp, err := a.doRequest(ctx, messages, true)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return
@@ -136,11 +135,45 @@ func (a Anthropic) Chat(
 	}
 }
 
-func (a Anthropic) doRequest(
-	ctx context.Context,
-	systemMessage string,
-	messages []models.Message,
-) (*http.Response, error) {
+// GenerateTitle generates a title for a given message using the Anthropic API. It sends a single message to the
+// Anthropic API and returns the first response content as the title. The context can be used to cancel ongoing
+// requests.
+func (a Anthropic) GenerateTitle(ctx context.Context, message string) (string, error) {
+	messages := []models.Message{
+		{
+			Role: "user",
+			Contents: []models.Content{
+				{
+					Type: models.ContentTypeText,
+					Text: message,
+				},
+			},
+		},
+	}
+	resp, err := a.doRequest(ctx, messages, false)
+	if err != nil {
+		return "", fmt.Errorf("error sending request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var msg anthropicMessage
+	if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
+		return "", fmt.Errorf("error decoding response: %w", err)
+	}
+
+	if len(msg.Content) == 0 {
+		return "", fmt.Errorf("empty response content")
+	}
+
+	return msg.Content[0].Text, nil
+}
+
+func (a Anthropic) doRequest(ctx context.Context, messages []models.Message, stream bool) (*http.Response, error) {
 	msgs := make([]anthropicMessage, 0, len(messages))
 	for _, msg := range messages {
 		contents := make([]anthropicMessageContent, 0, len(msg.Contents))
@@ -161,8 +194,8 @@ func (a Anthropic) doRequest(
 	reqBody := anthropicChatRequest{
 		Model:     a.model,
 		Messages:  msgs,
-		Stream:    true,
-		System:    systemMessage,
+		Stream:    stream,
+		System:    a.systemPrompt,
 		MaxTokens: a.maxTokens,
 	}
 

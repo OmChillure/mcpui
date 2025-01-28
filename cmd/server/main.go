@@ -21,27 +21,21 @@ import (
 )
 
 func main() {
-	cfgDir, err := os.UserConfigDir()
-	if err != nil {
-		log.Fatal(fmt.Errorf("error getting user config dir: %w", err))
-	}
-	cfgPath := filepath.Join(cfgDir, "/mcpwebui")
-	if err := os.MkdirAll(cfgPath, 0755); err != nil {
-		log.Fatal(fmt.Errorf("error creating config directory: %w", err))
-	}
+	cfg, cfgDir := loadConfig()
 
-	cfgFilePath := filepath.Join(cfgDir, "/mcpwebui/config.yaml")
-	cfgFile, err := os.Open(cfgFilePath)
+	sysPrompt := cfg.SystemPrompt
+	if sysPrompt == "" {
+		sysPrompt = "You are a helpful assistant."
+	}
+	llm, err := cfg.LLM.llm(sysPrompt)
 	if err != nil {
-		log.Fatal(fmt.Errorf("error opening config file: %w", err))
+		panic(err)
 	}
-	defer cfgFile.Close()
-
-	cfg := config{}
-	if err := yaml.NewDecoder(cfgFile).Decode(&cfg); err != nil {
-		panic(fmt.Errorf("error decoding config file: %w", err))
+	titleGenPrompt := cfg.TitleGeneratorPrompt
+	if titleGenPrompt == "" {
+		titleGenPrompt = "Generate a title for this chat with only one sentence with maximum 5 words."
 	}
-	llm, err := cfg.LLM.llm()
+	titleGen, err := cfg.LLM.titleGen(titleGenPrompt)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +80,7 @@ func main() {
 		log.Printf("Connected to MCP server %s", mcpClients[i].ServerInfo().Name)
 	}
 
-	m, err := handlers.NewMain(llm, boltDB, mcpClients)
+	m, err := handlers.NewMain(llm, titleGen, boltDB, mcpClients)
 	if err != nil {
 		panic(err)
 	}
@@ -161,6 +155,30 @@ func main() {
 			}
 		}
 	}
+}
+
+func loadConfig() (config, string) {
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatal(fmt.Errorf("error getting user config dir: %w", err))
+	}
+	cfgPath := filepath.Join(cfgDir, "/mcpwebui")
+	if err := os.MkdirAll(cfgPath, 0755); err != nil {
+		log.Fatal(fmt.Errorf("error creating config directory: %w", err))
+	}
+
+	cfgFilePath := filepath.Join(cfgDir, "/mcpwebui/config.yaml")
+	cfgFile, err := os.Open(cfgFilePath)
+	if err != nil {
+		log.Fatal(fmt.Errorf("error opening config file: %w", err))
+	}
+	defer cfgFile.Close()
+
+	cfg := config{}
+	if err := yaml.NewDecoder(cfgFile).Decode(&cfg); err != nil {
+		panic(fmt.Errorf("error decoding config file: %w", err))
+	}
+	return cfg, cfgDir
 }
 
 func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*exec.Cmd) {

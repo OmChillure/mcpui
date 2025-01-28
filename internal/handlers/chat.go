@@ -112,7 +112,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	go m.chat(chatID, messages)
 
 	if isNewChat {
-		go m.generateChatTitle(chatID, messages)
+		go m.generateChatTitle(chatID, msg)
 
 		// For new chats, we prepare all messages with appropriate streaming states
 		msgs := make([]message, len(messages))
@@ -206,7 +206,7 @@ func (m Main) chat(chatID string, messages []models.Message) {
 		Type: models.ContentTypeText,
 		Text: "",
 	})
-	it := m.llm.Chat(context.Background(), "", messages)
+	it := m.llm.Chat(context.Background(), messages)
 
 	for content, err := range it {
 		msg := sse.Message{
@@ -238,19 +238,11 @@ func (m Main) chat(chatID string, messages []models.Message) {
 	}
 }
 
-func (m Main) generateChatTitle(chatID string, messages []models.Message) {
-	systemMessage := "Generate a title for this chat with only one sentence with maximum 5 words."
-	it := m.llm.Chat(context.Background(), systemMessage, messages)
-
-	title := ""
-	for content, err := range it {
-		if err != nil {
-			log.Printf("Error generating chat title: %v", err)
-			return
-		}
-		if content.Type == models.ContentTypeText {
-			title += content.Text
-		}
+func (m Main) generateChatTitle(chatID string, message string) {
+	title, err := m.titleGenerator.GenerateTitle(context.Background(), message)
+	if err != nil {
+		log.Printf("Error generating chat title: %v", err)
+		return
 	}
 
 	updatedChat := models.Chat{
