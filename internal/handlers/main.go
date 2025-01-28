@@ -16,7 +16,7 @@ import (
 // LLM represents a large language model interface that provides chat functionality. It accepts a context
 // and a sequence of messages, returning an iterator that yields response chunks and potential errors.
 type LLM interface {
-	Chat(ctx context.Context, messages []models.Message) iter.Seq2[string, error]
+	Chat(ctx context.Context, systemMessage string, messages []models.Message) iter.Seq2[models.Content, error]
 }
 
 // Store defines the interface for managing chat and message persistence. It provides methods for
@@ -41,10 +41,14 @@ type Main struct {
 	llm   LLM
 	store Store
 
+	mcpClients []*mcp.Client
+
 	servers   []mcp.Info
 	tools     []mcp.Tool
 	resources []mcp.Resource
 	prompts   []mcp.Prompt
+
+	toolsMap map[string]int // Map of tool names to mcpClients index.
 }
 
 const chatsSSETopic = "chats"
@@ -68,6 +72,7 @@ func NewMain(llm LLM, store Store, mcpClients []*mcp.Client) (Main, error) {
 	tools := make([]mcp.Tool, 0, len(mcpClients))
 	resources := make([]mcp.Resource, 0, len(mcpClients))
 	prompts := make([]mcp.Prompt, 0, len(mcpClients))
+	tm := make(map[string]int)
 	for i := range mcpClients {
 		servers[i] = mcpClients[i].ServerInfo()
 		serverName := servers[i].Name
@@ -79,6 +84,9 @@ func NewMain(llm LLM, store Store, mcpClients []*mcp.Client) (Main, error) {
 				return Main{}, fmt.Errorf("failed to list tools from server %s: %w", serverName, err)
 			}
 			ts = listTools.Tools
+			for _, tool := range ts {
+				tm[tool.Name] = i
+			}
 		}
 
 		var rs []mcp.Resource
@@ -123,13 +131,15 @@ func NewMain(llm LLM, store Store, mcpClients []*mcp.Client) (Main, error) {
 				}, true
 			},
 		},
-		templates: tmpl,
-		llm:       llm,
-		store:     store,
-		servers:   servers,
-		tools:     tools,
-		resources: resources,
-		prompts:   prompts,
+		templates:  tmpl,
+		llm:        llm,
+		store:      store,
+		mcpClients: mcpClients,
+		toolsMap:   tm,
+		servers:    servers,
+		tools:      tools,
+		resources:  resources,
+		prompts:    prompts,
 	}, nil
 }
 

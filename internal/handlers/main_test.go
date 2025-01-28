@@ -46,7 +46,12 @@ func TestHandleHome(t *testing.T) {
 			{ID: "1", Title: "Test Chat"},
 		},
 		messages: map[string][]models.Message{
-			"1": {{ID: "1", Role: "user", Content: "Hello"}},
+			"1": {{ID: "1", Role: "user", Contents: []models.Content{
+				{
+					Type: models.ContentTypeText,
+					Text: "Hello",
+				},
+			}}},
 		},
 	}
 
@@ -154,14 +159,17 @@ func TestHandleChats(t *testing.T) {
 	}
 }
 
-func (m mockLLM) Chat(_ context.Context, _ []models.Message) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
+func (m mockLLM) Chat(_ context.Context, _ string, _ []models.Message) iter.Seq2[models.Content, error] {
+	return func(yield func(models.Content, error) bool) {
 		if m.err != nil {
-			yield("", m.err)
+			yield(models.Content{}, m.err)
 			return
 		}
 		for _, resp := range m.responses {
-			if !yield(resp, nil) {
+			if !yield(models.Content{
+				Type: models.ContentTypeText,
+				Text: resp,
+			}, nil) {
 				return
 			}
 		}

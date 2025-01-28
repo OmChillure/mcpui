@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/MegaGrindStone/go-mcp"
+	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 )
 
 type homePageData struct {
@@ -64,7 +65,7 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 			messages[i] = message{
 				ID:             ms[i].ID,
 				Role:           ms[i].Role,
-				Content:        ms[i].Content,
+				Content:        models.RenderContents(ms[i].Contents),
 				Timestamp:      ms[i].Timestamp,
 				StreamingState: "ended",
 			}

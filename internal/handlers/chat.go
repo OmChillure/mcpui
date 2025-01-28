@@ -74,9 +74,14 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 
 	// We create two messages: user's input and a placeholder for AI response
 	um := models.Message{
-		ID:        uuid.New().String(),
-		Role:      "user",
-		Content:   msg,
+		ID:   uuid.New().String(),
+		Role: "user",
+		Contents: []models.Content{
+			{
+				Type: models.ContentTypeText,
+				Text: msg,
+			},
+		},
 		Timestamp: time.Now(),
 	}
 	userMsgID, err := m.store.AddMessage(r.Context(), chatID, um)
@@ -120,7 +125,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 			msgs[i] = message{
 				ID:             messages[i].ID,
 				Role:           messages[i].Role,
-				Content:        messages[i].Content,
+				Content:        models.RenderContents(messages[i].Contents),
 				Timestamp:      messages[i].Timestamp,
 				StreamingState: streamingState,
 			}
@@ -140,7 +145,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	err = m.templates.ExecuteTemplate(w, "user_message", message{
 		ID:             userMsgID,
 		Role:           um.Role,
-		Content:        um.Content,
+		Content:        models.RenderContents(um.Contents),
 		Timestamp:      um.Timestamp,
 		StreamingState: "ended",
 	})
@@ -152,7 +157,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	err = m.templates.ExecuteTemplate(w, "ai_message", message{
 		ID:             aiMsgID,
 		Role:           am.Role,
-		Content:        am.Content,
+		Content:        models.RenderContents(am.Contents),
 		Timestamp:      am.Timestamp,
 		StreamingState: "loading",
 	})
@@ -196,11 +201,14 @@ func (m Main) chat(chatID string, messages []models.Message) {
 		_ = m.sseSrv.Publish(e)
 	}()
 
-	// We accumulate the AI response and convert it to markdown in real-time
 	aiMsg := messages[len(messages)-1]
-	it := m.llm.Chat(context.Background(), messages)
+	aiMsg.Contents = append(aiMsg.Contents, models.Content{
+		Type: models.ContentTypeText,
+		Text: "",
+	})
+	it := m.llm.Chat(context.Background(), "", messages)
 
-	for streamMsg, err := range it {
+	for content, err := range it {
 		msg := sse.Message{
 			Type: messagesSSEType,
 		}
@@ -210,14 +218,19 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			return
 		}
 
-		aiMsg.Content += streamMsg
+		switch content.Type {
+		case models.ContentTypeText:
+			aiMsg.Contents[0].Text += content.Text
+		case models.ContentTypeCallTool:
+		case models.ContentTypeToolResult:
+		}
 
 		if err := m.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
 			log.Printf("Failed to save message content: %v", err)
 			return
 		}
 
-		msg.AppendData(fmt.Sprintf("<md-block>%s</md-block>", aiMsg.Content))
+		msg.AppendData(fmt.Sprintf("<md-block>%s</md-block>", models.RenderContents(aiMsg.Contents)))
 		if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
 			log.Printf("Failed to publish message: %v", err)
 			return
@@ -226,22 +239,18 @@ func (m Main) chat(chatID string, messages []models.Message) {
 }
 
 func (m Main) generateChatTitle(chatID string, messages []models.Message) {
-	var msgs []models.Message
-	msgs = append(msgs, models.Message{
-		Role:    "system",
-		Content: "Generate a title for this chat with only one sentence with maximum 5 words.",
-	})
-	msgs = append(msgs, messages...)
-
-	it := m.llm.Chat(context.Background(), msgs)
+	systemMessage := "Generate a title for this chat with only one sentence with maximum 5 words."
+	it := m.llm.Chat(context.Background(), systemMessage, messages)
 
 	title := ""
-	for msg, err := range it {
+	for content, err := range it {
 		if err != nil {
 			log.Printf("Error generating chat title: %v", err)
 			return
 		}
-		title += msg
+		if content.Type == models.ContentTypeText {
+			title += content.Text
+		}
 	}
 
 	updatedChat := models.Chat{
