@@ -64,7 +64,7 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 		for i := range ms {
 			messages[i] = message{
 				ID:             ms[i].ID,
-				Role:           ms[i].Role,
+				Role:           string(ms[i].Role),
 				Content:        models.RenderContents(ms[i].Contents),
 				Timestamp:      ms[i].Timestamp,
 				StreamingState: "ended",

@@ -19,7 +19,7 @@ type Chat struct {
 // the precise time when the message was created.
 type Message struct {
 	ID        string
-	Role      string
+	Role      Role
 	Contents  []Content
 	Timestamp time.Time
 }
@@ -28,8 +28,7 @@ type Message struct {
 type Content struct {
 	Type ContentType
 
-	// Text would contain a normal text if Type is ContentTypeText, and it would be the tool result
-	// if Type is ContentTypeToolResult, otherwise it would be empty.
+	// Text would be filled if Type is ContentTypeText.
 	Text string
 
 	// ToolName would be filled if Type is ContentTypeCallTool.
@@ -37,14 +36,29 @@ type Content struct {
 	// ToolInput would be filled if Type is ContentTypeCallTool.
 	ToolInput json.RawMessage
 
+	// ToolResult would be filled if Type is ContentTypeToolResult. The value would be either tool result or error.
+	ToolResult json.RawMessage
+
 	// CallToolID would be filled if Type is ContentTypeCallTool or ContentTypeToolResult.
 	CallToolID string
+	// CallToolFailed is a flag indicating if the call tool failed.
+	// This flag would be set to true if the call tool failed and Type is ContentTypeToolResult.
+	CallToolFailed bool
 }
+
+// Role represents the role of a message participant.
+type Role string
 
 // ContentType represents the type of content in messages.
 type ContentType string
 
 const (
+	// RoleUser represents a user message. A message with this role would only contain text content.
+	RoleUser Role = "user"
+	// RoleAssistant represents an assistant message. A message with this role would contain text content
+	// and potentially other types of content.
+	RoleAssistant Role = "assistant"
+
 	// ContentTypeText represents text content.
 	ContentTypeText ContentType = "text"
 	// ContentTypeCallTool represents a call to a tool.
@@ -61,9 +75,9 @@ func RenderContents(contents []Content) string {
 		case ContentTypeText:
 			sb.WriteString(content.Text)
 		case ContentTypeCallTool:
-			sb.WriteString(fmt.Sprintf("\nCalling Tool: %s\nInput: %s\n", content.ToolName, content.ToolInput))
+			sb.WriteString(fmt.Sprintf("<br>Calling Tool: %s<br>Input: %s<br>", content.ToolName, content.ToolInput))
 		case ContentTypeToolResult:
-			sb.WriteString(fmt.Sprintf("Tool: %s\nResult: %s\n", content.ToolName, content.Text))
+			sb.WriteString(fmt.Sprintf("Result: %s<br>", content.ToolResult))
 		}
 	}
 	return sb.String()

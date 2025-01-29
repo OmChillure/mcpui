@@ -10,6 +10,7 @@ import (
 	"iter"
 	"net/http"
 
+	"github.com/MegaGrindStone/go-mcp"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	"github.com/tmaxmax/go-sse"
 )
@@ -43,7 +44,28 @@ type anthropicMessage struct {
 type anthropicMessageContent struct {
 	Type string `json:"type"`
 
+	// For text type.
 	Text string `json:"text,omitempty"`
+
+	// For tool_use type.
+	ID    string          `json:"id,omitempty"`
+	Name  string          `json:"name,omitempty"`
+	Input json.RawMessage `json:"input,omitempty"`
+
+	// For tool_result type.
+	ToolUseID string          `json:"tool_use_id,omitempty"`
+	Content   json.RawMessage `json:"content,omitempty"`
+	IsError   bool            `json:"is_error,omitempty"`
+}
+
+type anthropicContentBlockStart struct {
+	Type         string
+	ContentBlock struct {
+		Type  string          `json:"type"`
+		ID    string          `json:"id"`
+		Name  string          `json:"name"`
+		Input json.RawMessage `json:"input"`
+	} `json:"content_block"`
 }
 
 type anthropicContentBlockDelta struct {
@@ -89,9 +111,13 @@ func NewAnthropic(apiKey, model, systemPrompt string, maxTokens int) Anthropic {
 // Chat streams responses from the Anthropic API for a given sequence of messages. It processes system
 // messages separately and returns an iterator that yields response chunks and potential errors. The
 // context can be used to cancel ongoing requests. Refer to models.Message for message structure details.
-func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq2[models.Content, error] {
+func (a Anthropic) Chat(
+	ctx context.Context,
+	messages []models.Message,
+	tools []mcp.Tool,
+) iter.Seq2[models.Content, error] {
 	return func(yield func(models.Content, error) bool) {
-		resp, err := a.doRequest(ctx, messages, true)
+		resp, err := a.doRequest(ctx, messages, tools, true)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				return
@@ -101,6 +127,11 @@ func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq
 		}
 		defer resp.Body.Close()
 
+		isToolUse := false
+		inputJSON := ""
+		toolContent := models.Content{
+			Type: models.ContentTypeCallTool,
+		}
 		for ev, err := range sse.Read(resp.Body, nil) {
 			if err != nil {
 				yield(models.Content{}, fmt.Errorf("error reading response: %w", err))
@@ -117,11 +148,27 @@ func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq
 				return
 			case "message_stop":
 				return
+			case "content_block_start":
+				var res anthropicContentBlockStart
+				if err := json.Unmarshal([]byte(ev.Data), &res); err != nil {
+					yield(models.Content{}, fmt.Errorf("error unmarshaling block start: %w", err))
+					return
+				}
+				if res.ContentBlock.Type != "tool_use" {
+					continue
+				}
+				isToolUse = true
+				toolContent.ToolName = res.ContentBlock.Name
+				toolContent.CallToolID = res.ContentBlock.ID
 			case "content_block_delta":
 				var res anthropicContentBlockDelta
 				if err := json.Unmarshal([]byte(ev.Data), &res); err != nil {
 					yield(models.Content{}, fmt.Errorf("error unmarshaling block delta: %w", err))
 					return
+				}
+				if isToolUse {
+					inputJSON += res.Delta.PartialJSON
+					continue
 				}
 				if !yield(models.Content{
 					Type: models.ContentTypeText,
@@ -129,6 +176,20 @@ func (a Anthropic) Chat(ctx context.Context, messages []models.Message) iter.Seq
 				}, nil) {
 					return
 				}
+			case "content_block_stop":
+				if !isToolUse {
+					continue
+				}
+
+				if inputJSON == "" {
+					inputJSON = "{}"
+				}
+				toolContent.ToolInput = json.RawMessage(inputJSON)
+				if !yield(toolContent, nil) {
+					return
+				}
+				isToolUse = false
+				inputJSON = ""
 			default:
 			}
 		}
@@ -150,7 +211,7 @@ func (a Anthropic) GenerateTitle(ctx context.Context, message string) (string, e
 			},
 		},
 	}
-	resp, err := a.doRequest(ctx, messages, false)
+	resp, err := a.doRequest(ctx, messages, nil, false)
 	if err != nil {
 		return "", fmt.Errorf("error sending request: %w", err)
 	}
@@ -173,22 +234,74 @@ func (a Anthropic) GenerateTitle(ctx context.Context, message string) (string, e
 	return msg.Content[0].Text, nil
 }
 
-func (a Anthropic) doRequest(ctx context.Context, messages []models.Message, stream bool) (*http.Response, error) {
+func (a Anthropic) doRequest(
+	ctx context.Context,
+	messages []models.Message,
+	tools []mcp.Tool,
+	stream bool,
+) (*http.Response, error) {
 	msgs := make([]anthropicMessage, 0, len(messages))
 	for _, msg := range messages {
+		if msg.Role == models.RoleUser {
+			if len(msg.Contents) != 1 {
+				return nil, fmt.Errorf("user message should only contain one content, got %d", len(msg.Contents))
+			}
+			msgs = append(msgs, anthropicMessage{
+				Role: string(msg.Role),
+				Content: []anthropicMessageContent{
+					{
+						Type: "text",
+						Text: msg.Contents[0].Text,
+					},
+				},
+			})
+			continue
+		}
+
 		contents := make([]anthropicMessageContent, 0, len(msg.Contents))
+
 		for _, ct := range msg.Contents {
-			if ct.Type == models.ContentTypeText {
+			switch ct.Type {
+			case models.ContentTypeText:
 				contents = append(contents, anthropicMessageContent{
 					Type: "text",
 					Text: ct.Text,
 				})
+			case models.ContentTypeCallTool:
+				contents = append(contents, anthropicMessageContent{
+					Type:  "tool_use",
+					ID:    ct.CallToolID,
+					Name:  ct.ToolName,
+					Input: ct.ToolInput,
+				})
+				msgs = append(msgs, anthropicMessage{
+					Role:    string(msg.Role),
+					Content: contents,
+				})
+				contents = make([]anthropicMessageContent, 0, len(msg.Contents))
+			case models.ContentTypeToolResult:
+				msgs = append(msgs, anthropicMessage{
+					Role: "user",
+					Content: []anthropicMessageContent{
+						{
+							Type:      "tool_result",
+							ToolUseID: ct.CallToolID,
+							IsError:   ct.CallToolFailed,
+							Content:   ct.ToolResult,
+						},
+					},
+				})
 			}
 		}
-		msgs = append(msgs, anthropicMessage{
-			Role:    msg.Role,
-			Content: contents,
-		})
+	}
+
+	aTools := make([]anthropicTool, len(tools))
+	for i, tool := range tools {
+		aTools[i] = anthropicTool{
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: tool.InputSchema,
+		}
 	}
 
 	reqBody := anthropicChatRequest{
@@ -197,6 +310,7 @@ func (a Anthropic) doRequest(ctx context.Context, messages []models.Message, str
 		Stream:    stream,
 		System:    a.systemPrompt,
 		MaxTokens: a.maxTokens,
+		Tools:     aTools,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -214,5 +328,14 @@ func (a Anthropic) doRequest(ctx context.Context, messages []models.Message, str
 	req.Header.Set("x-api-key", a.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	return a.client.Do(req)
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return resp, nil
 }

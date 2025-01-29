@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/MegaGrindStone/go-mcp"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	"github.com/google/uuid"
 	"github.com/tmaxmax/go-sse"
@@ -34,6 +36,17 @@ var (
 	chatsSSEType    = sse.Type("chats")
 	messagesSSEType = sse.Type("messages")
 )
+
+func callToolError(err error) json.RawMessage {
+	ctErr := struct {
+		Error string `json:"error"`
+	}{
+		Error: err.Error(),
+	}
+
+	res, _ := json.Marshal(ctErr)
+	return res
+}
 
 // HandleChats processes chat interactions through HTTP POST requests,
 // managing both new chat creation and message handling. It accepts user messages through form data,
@@ -75,7 +88,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	// We create two messages: user's input and a placeholder for AI response
 	um := models.Message{
 		ID:   uuid.New().String(),
-		Role: "user",
+		Role: models.RoleUser,
 		Contents: []models.Content{
 			{
 				Type: models.ContentTypeText,
@@ -93,7 +106,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	// Initialize empty AI message to be streamed later
 	am := models.Message{
 		ID:        uuid.New().String(),
-		Role:      "assistant",
+		Role:      models.RoleAssistant,
 		Timestamp: time.Now(),
 	}
 	aiMsgID, err := m.store.AddMessage(r.Context(), chatID, am)
@@ -124,7 +137,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 			}
 			msgs[i] = message{
 				ID:             messages[i].ID,
-				Role:           messages[i].Role,
+				Role:           string(messages[i].Role),
 				Content:        models.RenderContents(messages[i].Contents),
 				Timestamp:      messages[i].Timestamp,
 				StreamingState: streamingState,
@@ -144,7 +157,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 
 	err = m.templates.ExecuteTemplate(w, "user_message", message{
 		ID:             userMsgID,
-		Role:           um.Role,
+		Role:           string(um.Role),
 		Content:        models.RenderContents(um.Contents),
 		Timestamp:      um.Timestamp,
 		StreamingState: "ended",
@@ -156,7 +169,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 
 	err = m.templates.ExecuteTemplate(w, "ai_message", message{
 		ID:             aiMsgID,
-		Role:           am.Role,
+		Role:           string(am.Role),
 		Content:        models.RenderContents(am.Contents),
 		Timestamp:      am.Timestamp,
 		StreamingState: "loading",
@@ -202,39 +215,104 @@ func (m Main) chat(chatID string, messages []models.Message) {
 	}()
 
 	aiMsg := messages[len(messages)-1]
-	aiMsg.Contents = append(aiMsg.Contents, models.Content{
-		Type: models.ContentTypeText,
-		Text: "",
-	})
-	it := m.llm.Chat(context.Background(), messages)
+	contentIdx := -1
 
-	for content, err := range it {
-		msg := sse.Message{
-			Type: messagesSSEType,
+	for {
+		it := m.llm.Chat(context.Background(), messages, m.tools)
+		aiMsg.Contents = append(aiMsg.Contents, models.Content{
+			Type: models.ContentTypeText,
+			Text: "",
+		})
+		contentIdx++
+		callTool := false
+
+		for content, err := range it {
+			msg := sse.Message{
+				Type: messagesSSEType,
+			}
+			if err != nil {
+				msg.AppendData(err.Error())
+				_ = m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID))
+				return
+			}
+
+			switch content.Type {
+			case models.ContentTypeText:
+				aiMsg.Contents[contentIdx].Text += content.Text
+			case models.ContentTypeCallTool:
+				callTool = true
+				aiMsg.Contents = append(aiMsg.Contents, content)
+				contentIdx++
+			case models.ContentTypeToolResult:
+				log.Printf("Content type tool results is not allowed")
+				return
+			}
+
+			if err := m.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
+				log.Printf("Failed to save message content: %v", err)
+				return
+			}
+
+			msg.AppendData(fmt.Sprintf("<md-block>%s</md-block>", models.RenderContents(aiMsg.Contents)))
+			if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
+				log.Printf("Failed to publish message: %v", err)
+				return
+			}
+
+			if callTool {
+				break
+			}
 		}
+
+		if !callTool {
+			break
+		}
+
+		callToolContent := aiMsg.Contents[len(aiMsg.Contents)-1]
+
+		toolResContent := models.Content{
+			Type:       models.ContentTypeToolResult,
+			CallToolID: callToolContent.CallToolID,
+		}
+
+		clientIdx, ok := m.toolsMap[callToolContent.ToolName]
+		if !ok {
+			toolResContent.ToolResult = callToolError(fmt.Errorf("tool %s is not found", callToolContent.ToolName))
+			toolResContent.CallToolFailed = true
+			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
+			contentIdx++
+			messages[len(messages)-1] = aiMsg
+			continue
+		}
+
+		toolRes, err := m.mcpClients[clientIdx].CallTool(context.Background(), mcp.CallToolParams{
+			Name:      callToolContent.ToolName,
+			Arguments: callToolContent.ToolInput,
+		})
 		if err != nil {
-			msg.AppendData(err.Error())
-			_ = m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID))
-			return
+			toolResContent.ToolResult = callToolError(fmt.Errorf("tool call failed: %w", err))
+			toolResContent.CallToolFailed = true
+			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
+			contentIdx++
+			messages[len(messages)-1] = aiMsg
+			continue
 		}
 
-		switch content.Type {
-		case models.ContentTypeText:
-			aiMsg.Contents[0].Text += content.Text
-		case models.ContentTypeCallTool:
-		case models.ContentTypeToolResult:
+		resContent, err := json.Marshal(toolRes.Content)
+		if err != nil {
+			toolResContent.ToolResult = callToolError(fmt.Errorf("failed to marshal content: %w", err))
+			toolResContent.CallToolFailed = true
+			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
+			contentIdx++
+			messages[len(messages)-1] = aiMsg
+			continue
 		}
 
-		if err := m.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
-			log.Printf("Failed to save message content: %v", err)
-			return
-		}
-
-		msg.AppendData(fmt.Sprintf("<md-block>%s</md-block>", models.RenderContents(aiMsg.Contents)))
-		if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
-			log.Printf("Failed to publish message: %v", err)
-			return
-		}
+		toolResContent.ToolResult = resContent
+		toolResContent.CallToolFailed = toolRes.IsError
+		aiMsg.Contents = append(aiMsg.Contents, toolResContent)
+		contentIdx++
+		messages[len(messages)-1] = aiMsg
 	}
 }
 

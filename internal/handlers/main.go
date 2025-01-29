@@ -16,7 +16,7 @@ import (
 // LLM represents a large language model interface that provides chat functionality. It accepts a context
 // and a sequence of messages, returning an iterator that yields response chunks and potential errors.
 type LLM interface {
-	Chat(ctx context.Context, messages []models.Message) iter.Seq2[models.Content, error]
+	Chat(ctx context.Context, messages []models.Message, tools []mcp.Tool) iter.Seq2[models.Content, error]
 }
 
 // TitleGenerator represents a title generator interface that generates a title for a given message.

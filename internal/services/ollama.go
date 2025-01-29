@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 
+	"github.com/MegaGrindStone/go-mcp"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	"github.com/ollama/ollama/api"
 )
@@ -44,12 +45,12 @@ func NewOllama(host, model, systemPrompt string) Ollama {
 // for cancellation and a slice of messages representing the conversation history. The function returns
 // an iterator that yields response chunks as strings and potential errors. The response is streamed
 // incrementally, allowing for real-time processing of model outputs.
-func (o Ollama) Chat(ctx context.Context, messages []models.Message) iter.Seq2[models.Content, error] {
+func (o Ollama) Chat(ctx context.Context, messages []models.Message, _ []mcp.Tool) iter.Seq2[models.Content, error] {
 	return func(yield func(models.Content, error) bool) {
 		msgs := make([]api.Message, len(messages))
 		for i, msg := range messages {
 			msgs[i] = api.Message{
-				Role:    msg.Role,
+				Role:    string(msg.Role),
 				Content: models.RenderContents(msg.Contents),
 			}
 		}

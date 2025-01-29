@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MegaGrindStone/go-mcp"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/handlers"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 )
@@ -159,7 +160,7 @@ func TestHandleChats(t *testing.T) {
 	}
 }
 
-func (m mockLLM) Chat(_ context.Context, _ []models.Message) iter.Seq2[models.Content, error] {
+func (m mockLLM) Chat(_ context.Context, _ []models.Message, _ []mcp.Tool) iter.Seq2[models.Content, error] {
 	return func(yield func(models.Content, error) bool) {
 		if m.err != nil {
 			yield(models.Content{}, m.err)
