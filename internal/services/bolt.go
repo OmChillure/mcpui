@@ -1,10 +1,13 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
 	bolt "go.etcd.io/bbolt"
@@ -60,7 +63,21 @@ func (b BoltDB) Chats(context.Context) ([]models.Chat, error) {
 	if err != nil {
 		return nil, err
 	}
-	slices.Reverse(chats)
+	slices.SortFunc(chats, func(a, b models.Chat) int {
+		aID := 0
+		bID := 0
+
+		aIDArr := strings.Split(a.ID, "-")
+		if len(aIDArr) > 1 {
+			aID, _ = strconv.Atoi(aIDArr[0])
+		}
+		bIDArr := strings.Split(b.ID, "-")
+		if len(bIDArr) > 1 {
+			bID, _ = strconv.Atoi(bIDArr[0])
+		}
+
+		return cmp.Compare(bID, aID)
+	})
 	return chats, nil
 }
 
@@ -143,6 +160,21 @@ func (b BoltDB) Messages(_ context.Context, chatID string) ([]models.Message, er
 	if err != nil {
 		return nil, err
 	}
+	slices.SortFunc(messages, func(a, b models.Message) int {
+		aID := 0
+		bID := 0
+
+		aIDArr := strings.Split(a.ID, "-")
+		if len(aIDArr) > 1 {
+			aID, _ = strconv.Atoi(aIDArr[0])
+		}
+		bIDArr := strings.Split(b.ID, "-")
+		if len(bIDArr) > 1 {
+			bID, _ = strconv.Atoi(bIDArr[0])
+		}
+
+		return cmp.Compare(aID, bID)
+	})
 	return messages, nil
 }
 
