@@ -75,9 +75,12 @@ func RenderContents(contents []Content) string {
 		case ContentTypeText:
 			sb.WriteString(content.Text)
 		case ContentTypeCallTool:
-			sb.WriteString(fmt.Sprintf("<br>Calling Tool: %s<br>Input: %s<br>", content.ToolName, content.ToolInput))
+			sb.WriteString(fmt.Sprintf(`  
+        Calling Tool: %s  
+        Input: %s`, content.ToolName, content.ToolInput))
 		case ContentTypeToolResult:
-			sb.WriteString(fmt.Sprintf("Result: %s<br>", content.ToolResult))
+			sb.WriteString(fmt.Sprintf(`  
+        Result: %s`, content.ToolResult))
 		}
 	}
 	return sb.String()

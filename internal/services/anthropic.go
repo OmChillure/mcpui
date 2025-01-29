@@ -263,10 +263,12 @@ func (a Anthropic) doRequest(
 		for _, ct := range msg.Contents {
 			switch ct.Type {
 			case models.ContentTypeText:
-				contents = append(contents, anthropicMessageContent{
-					Type: "text",
-					Text: ct.Text,
-				})
+				if ct.Text != "" {
+					contents = append(contents, anthropicMessageContent{
+						Type: "text",
+						Text: ct.Text,
+					})
+				}
 			case models.ContentTypeCallTool:
 				contents = append(contents, anthropicMessageContent{
 					Type:  "tool_use",
@@ -334,7 +336,7 @@ func (a Anthropic) doRequest(
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s, request: %s", resp.StatusCode, string(body), jsonBody)
 	}
 
 	return resp, nil

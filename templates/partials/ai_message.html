@@ -8,7 +8,7 @@
         </div>
         
         <div class="message-content">
-            <div class="message-bubble p-3 rounded-3 bg-dark-subtle text-emphasis-dark"
+            <div class="message-bubble p-3 rounded-3 text-emphasis-dark" style="background-color: #0d1117;"
                 {{if or (eq .StreamingState "streaming") (eq .StreamingState "loading")}}
                     hx-ext="sse"
                     sse-connect="/sse/messages?message_id={{.ID}}"
@@ -25,7 +25,7 @@
                         <span class="text-secondary">AI is thinking...</span>
                     </div>
                 {{else}}
-                    <md-block>{{.Content}}</md-block>
+                    <zero-md><script type="text/markdown">{{.Content}}</script></zero-md>
                 {{end}}
             </div>
             <div class="message-meta mt-1">
