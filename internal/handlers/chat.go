@@ -253,8 +253,7 @@ func (m Main) chat(chatID string, messages []models.Message) {
 				return
 			}
 
-			msg.AppendData(fmt.Sprintf("<zero-md><script type=\"text/markdown\">%s</script></zero-md>",
-				models.RenderContents(aiMsg.Contents)))
+			msg.AppendData(models.RenderContents(aiMsg.Contents))
 			if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
 				log.Printf("Failed to publish message: %v", err)
 				return
