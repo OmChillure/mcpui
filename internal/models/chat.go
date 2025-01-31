@@ -70,17 +70,56 @@ const (
 // RenderContents renders a slice of Content into a string.
 func RenderContents(contents []Content) string {
 	var sb strings.Builder
-	for _, content := range contents {
+	idx := 0
+	for idx < len(contents) {
+		content := contents[idx]
 		switch content.Type {
 		case ContentTypeText:
+			if content.Text == "" {
+				idx++
+				continue
+			}
 			sb.WriteString(content.Text)
-		case ContentTypeCallTool:
+			idx++
+			if idx >= len(contents) {
+				break
+			}
+			nextContent := contents[idx]
+			if nextContent.Type != ContentTypeCallTool {
+				return fmt.Sprintf("invalid content type %s at index %d, want %s", nextContent.Type, idx, ContentTypeCallTool)
+			}
 			sb.WriteString(fmt.Sprintf(`  
         Calling Tool: %s  
-        Input: %s`, content.ToolName, content.ToolInput))
-		case ContentTypeToolResult:
+        Input: %s`, nextContent.ToolName, nextContent.ToolInput))
+			idx++
+			if idx >= len(contents) {
+				break
+			}
+			nextContent = contents[idx]
+			if nextContent.Type != ContentTypeToolResult {
+				return fmt.Sprintf("invalid content type %s at index %d, want %s", nextContent.Type, idx, ContentTypeToolResult)
+			}
 			sb.WriteString(fmt.Sprintf(`  
-        Result: %s`, content.ToolResult))
+        Result: %s  
+        `, nextContent.ToolResult))
+			idx++
+		case ContentTypeCallTool:
+			sb.WriteString(fmt.Sprintf(`Calling Tool: %s  
+    Input: %s`, content.ToolName, content.ToolInput))
+			idx++
+			if idx >= len(contents) {
+				break
+			}
+			nextContent := contents[idx]
+			if nextContent.Type != ContentTypeToolResult {
+				return fmt.Sprintf("invalid content type %s at index %d, want %s", nextContent.Type, idx, ContentTypeToolResult)
+			}
+			sb.WriteString(fmt.Sprintf(`  
+        Result: %s  
+        `, nextContent.ToolResult))
+			idx++
+		case ContentTypeToolResult:
+			return fmt.Sprintf("unexpected content type %s at index %d", content.Type, idx)
 		}
 	}
 	return sb.String()
