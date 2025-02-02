@@ -35,7 +35,7 @@ func main() {
 	if titleGenPrompt == "" {
 		titleGenPrompt = "Generate a title for this chat with only one sentence with maximum 5 words."
 	}
-	titleGen, err := cfg.LLM.titleGen(titleGenPrompt)
+	titleGen, err := cfg.GenTitleLLM.titleGen(titleGenPrompt)
 	if err != nil {
 		panic(err)
 	}

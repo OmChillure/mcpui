@@ -25,6 +25,7 @@ type config struct {
 	SystemPrompt         string                          `yaml:"systemPrompt"`
 	TitleGeneratorPrompt string                          `yaml:"titleGeneratorPrompt"`
 	LLM                  llmConfig                       `yaml:"llm"`
+	GenTitleLLM          llmConfig                       `yaml:"genTitleLLM"`
 	MCPSSEServers        map[string]mcpSSEServerConfig   `yaml:"mcpSSEServers"`
 	MCPStdIOServers      map[string]mcpStdIOServerConfig `yaml:"mcpStdIOServers"`
 }
@@ -53,6 +54,7 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	var rawConfig struct {
 		Port            string                          `yaml:"port"`
 		LLM             map[string]any                  `yaml:"llm"`
+		GenTitleLLM     map[string]any                  `yaml:"genTitleLLM"`
 		MCPSSEServers   map[string]mcpSSEServerConfig   `yaml:"mcpSSEServers"`
 		MCPStdIOServers map[string]mcpStdIOServerConfig `yaml:"mcpStdIOServers"`
 	}
@@ -67,8 +69,16 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	if !ok {
 		return fmt.Errorf("llm provider is required")
 	}
+	genTitleLLMProvider, ok := rawConfig.GenTitleLLM["provider"].(string)
+	if !ok {
+		return fmt.Errorf("genTitleLLM provider is required")
+	}
 
 	llmRawYAML, err := yaml.Marshal(rawConfig.LLM)
+	if err != nil {
+		return err
+	}
+	genTitleLLMRawYAML, err := yaml.Marshal(rawConfig.GenTitleLLM)
 	if err != nil {
 		return err
 	}
@@ -87,7 +97,26 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
+	var genTitleLLM llmConfig
+	useSameLLM := false
+	switch genTitleLLMProvider {
+	case "ollama":
+		genTitleLLM = &ollamaConfig{}
+	case "anthropic":
+		genTitleLLM = &anthropicConfig{}
+	default:
+		useSameLLM = true
+		genTitleLLM = llm
+	}
+
+	if !useSameLLM {
+		if err := yaml.Unmarshal(genTitleLLMRawYAML, genTitleLLM); err != nil {
+			return err
+		}
+	}
+
 	c.LLM = llm
+	c.GenTitleLLM = genTitleLLM
 	c.MCPSSEServers = rawConfig.MCPSSEServers
 	c.MCPStdIOServers = rawConfig.MCPStdIOServers
 

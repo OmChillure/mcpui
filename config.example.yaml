@@ -10,6 +10,11 @@ llm:
   # anthropic
   apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
   maxTokens: 1000
+genTitleLLM: # Default to the same LLM as the main LLM
+  provider: anthropic
+  model: claude-3-5-sonnet-20241022
+  apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
+  maxTokens: 1000
 mcpStdIOServers:
   filesystem:
     command: npx
