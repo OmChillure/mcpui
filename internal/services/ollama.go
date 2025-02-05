@@ -116,11 +116,25 @@ func (o Ollama) Chat(
 
 		oTools := make([]api.Tool, len(tools))
 		for i, tool := range tools {
+			var params struct {
+				Type       string   `json:"type"`
+				Required   []string `json:"required"`
+				Properties map[string]struct {
+					Type        string   `json:"type"`
+					Description string   `json:"description"`
+					Enum        []string `json:"enum,omitempty"`
+				} `json:"properties"`
+			}
+			if err := json.Unmarshal([]byte(tool.InputSchema), &params); err != nil {
+				yield(models.Content{}, fmt.Errorf("error unmarshaling tool input schema: %w", err))
+				return
+			}
 			oTool := api.Tool{
 				Type: "function",
 				Function: api.ToolFunction{
 					Name:        tool.Name,
 					Description: tool.Description,
+					Parameters:  params,
 				},
 			}
 
@@ -184,16 +198,21 @@ func (o Ollama) Chat(
 // Ollama API and returns the first response content as the title. The context can be used to cancel ongoing
 // requests.
 func (o Ollama) GenerateTitle(ctx context.Context, message string) (string, error) {
+	msgs := []api.Message{
+		{
+			Role:    "system",
+			Content: o.systemPrompt,
+		},
+		{
+			Role:    "user",
+			Content: message,
+		},
+	}
 	f := false
 	req := api.ChatRequest{
-		Model: o.model,
-		Messages: []api.Message{
-			{
-				Role:    "user",
-				Content: message,
-			},
-		},
-		Stream: &f,
+		Model:    o.model,
+		Messages: msgs,
+		Stream:   &f,
 	}
 
 	var title string
