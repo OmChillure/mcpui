@@ -20,6 +20,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type stdIOClient struct {
+	cmd       *exec.Cmd
+	transport mcp.StdIO
+}
+
 func main() {
 	cfg, cfgDir := loadConfig()
 
@@ -51,7 +56,7 @@ func main() {
 		Version: "0.1.0",
 	}
 
-	mcpClients, stdIOCmds := populateMCPClients(cfg, mcpClientInfo)
+	mcpClients, stdIOClients := populateMCPClients(cfg, mcpClientInfo)
 
 	var mcpCancels []context.CancelFunc
 	for i, cli := range mcpClients {
@@ -111,8 +116,9 @@ func main() {
 		for _, cancel := range mcpCancels {
 			cancel()
 		}
-		for _, stdIOCmd := range stdIOCmds {
-			if err := stdIOCmd.Wait(); err != nil {
+		for _, ioCli := range stdIOClients {
+			ioCli.transport.Close()
+			if err := ioCli.cmd.Wait(); err != nil {
 				log.Printf("Failed to wait for stdIO command: %v", err)
 			}
 		}
@@ -181,7 +187,7 @@ func loadConfig() (config, string) {
 	return cfg, cfgDir
 }
 
-func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*exec.Cmd) {
+func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []stdIOClient) {
 	var mcpClients []*mcp.Client
 
 	for _, mcpSSEServerConfig := range cfg.MCPSSEServers {
@@ -190,10 +196,12 @@ func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*e
 		mcpClients = append(mcpClients, cli)
 	}
 
-	var stdIOCmds []*exec.Cmd
+	var stdIOClients []stdIOClient
 	for _, mcpStdIOServerConfig := range cfg.MCPStdIOServers {
+		ioCli := stdIOClient{}
+
 		cmd := exec.Command(mcpStdIOServerConfig.Command, mcpStdIOServerConfig.Args...)
-		stdIOCmds = append(stdIOCmds, cmd)
+		ioCli.cmd = cmd
 
 		in, err := cmd.StdinPipe()
 		if err != nil {
@@ -208,10 +216,12 @@ func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*e
 		}
 
 		cliStdIO := mcp.NewStdIO(out, in)
+		ioCli.transport = cliStdIO
 
 		cli := mcp.NewClient(mcpClientInfo, cliStdIO)
 		mcpClients = append(mcpClients, cli)
+		stdIOClients = append(stdIOClients, ioCli)
 	}
 
-	return mcpClients, stdIOCmds
+	return mcpClients, stdIOClients
 }
