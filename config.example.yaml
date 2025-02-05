@@ -10,6 +10,9 @@ llm:
   # anthropic
   apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
   maxTokens: 1000
+  # openai
+  apiKey: YOUR_API_KEY # Default to environment variable OPENAI_API_KEY
+  baseURL: https://api.openai.com/v1 # Default to https://api.openai.com/v1
 genTitleLLM: # Default to the same LLM as the main LLM
   provider: anthropic
   model: claude-3-5-sonnet-20241022

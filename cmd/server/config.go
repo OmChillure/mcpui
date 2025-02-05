@@ -41,6 +41,12 @@ type anthropicConfig struct {
 	MaxTokens     int    `yaml:"maxTokens"`
 }
 
+type openaiConfig struct {
+	BaseLLMConfig `yaml:",inline"`
+	APIKey        string `yaml:"apiKey"`
+	BaseURL       string `yaml:"baseURL"`
+}
+
 type mcpSSEServerConfig struct {
 	URL string `yaml:"url"`
 }
@@ -52,11 +58,13 @@ type mcpStdIOServerConfig struct {
 
 func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	var rawConfig struct {
-		Port            string                          `yaml:"port"`
-		LLM             map[string]any                  `yaml:"llm"`
-		GenTitleLLM     map[string]any                  `yaml:"genTitleLLM"`
-		MCPSSEServers   map[string]mcpSSEServerConfig   `yaml:"mcpSSEServers"`
-		MCPStdIOServers map[string]mcpStdIOServerConfig `yaml:"mcpStdIOServers"`
+		Port                 string                          `yaml:"port"`
+		SystemPrompt         string                          `yaml:"systemPrompt"`
+		TitleGeneratorPrompt string                          `yaml:"titleGeneratorPrompt"`
+		LLM                  map[string]any                  `yaml:"llm"`
+		GenTitleLLM          map[string]any                  `yaml:"genTitleLLM"`
+		MCPSSEServers        map[string]mcpSSEServerConfig   `yaml:"mcpSSEServers"`
+		MCPStdIOServers      map[string]mcpStdIOServerConfig `yaml:"mcpStdIOServers"`
 	}
 
 	if err := value.Decode(&rawConfig); err != nil {
@@ -64,6 +72,8 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	c.Port = rawConfig.Port
+	c.SystemPrompt = rawConfig.SystemPrompt
+	c.TitleGeneratorPrompt = rawConfig.TitleGeneratorPrompt
 
 	llmProvider, ok := rawConfig.LLM["provider"].(string)
 	if !ok {
@@ -89,6 +99,8 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 		llm = &ollamaConfig{}
 	case "anthropic":
 		llm = &anthropicConfig{}
+	case "openai":
+		llm = &openaiConfig{}
 	default:
 		return fmt.Errorf("unknown llm provider: %s", llmProvider)
 	}
@@ -104,6 +116,8 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 		genTitleLLM = &ollamaConfig{}
 	case "anthropic":
 		genTitleLLM = &anthropicConfig{}
+	case "openai":
+		genTitleLLM = &openaiConfig{}
 	default:
 		useSameLLM = true
 		genTitleLLM = llm
@@ -164,4 +178,28 @@ func (a anthropicConfig) llm(systemPrompt string) (handlers.LLM, error) {
 
 func (a anthropicConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
 	return a.newAnthropic(systemPrompt)
+}
+
+func (o openaiConfig) newOpenAI(systemPrompt string) (services.OpenAI, error) {
+	if o.Model == "" {
+		return services.OpenAI{}, fmt.Errorf("model is required")
+	}
+
+	baseURL := o.BaseURL
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	apiKey := o.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("OPENAI_API_KEY")
+	}
+	return services.NewOpenAI(apiKey, baseURL, o.Model, systemPrompt), nil
+}
+
+func (o openaiConfig) llm(systemPrompt string) (handlers.LLM, error) {
+	return o.newOpenAI(systemPrompt)
+}
+
+func (o openaiConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
+	return o.newOpenAI(systemPrompt)
 }
