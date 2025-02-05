@@ -38,13 +38,14 @@ var (
 )
 
 func callToolError(err error) json.RawMessage {
-	ctErr := struct {
-		Error string `json:"error"`
-	}{
-		Error: err.Error(),
+	contents := []mcp.Content{
+		{
+			Type: mcp.ContentTypeText,
+			Text: err.Error(),
+		},
 	}
 
-	res, _ := json.Marshal(ctErr)
+	res, _ := json.Marshal(contents)
 	return res
 }
 
