@@ -44,7 +44,6 @@ type anthropicConfig struct {
 type openaiConfig struct {
 	BaseLLMConfig `yaml:",inline"`
 	APIKey        string `yaml:"apiKey"`
-	BaseURL       string `yaml:"baseURL"`
 }
 
 type openrouterConfig struct {
@@ -192,15 +191,11 @@ func (o openaiConfig) newOpenAI(systemPrompt string) (services.OpenAI, error) {
 		return services.OpenAI{}, fmt.Errorf("model is required")
 	}
 
-	baseURL := o.BaseURL
-	if baseURL == "" {
-		baseURL = "https://api.openai.com/v1"
-	}
 	apiKey := o.APIKey
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
-	return services.NewOpenAI(apiKey, baseURL, o.Model, systemPrompt), nil
+	return services.NewOpenAI(apiKey, o.Model, systemPrompt), nil
 }
 
 func (o openaiConfig) llm(systemPrompt string) (handlers.LLM, error) {

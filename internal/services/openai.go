@@ -24,13 +24,11 @@ type OpenAI struct {
 }
 
 // NewOpenAI creates a new OpenAI instance with the specified API key, base URL, model name, and system prompt.
-func NewOpenAI(apiKey, baseURL, model, systemPrompt string) OpenAI {
-	cfg := goopenai.DefaultConfig(apiKey)
-	cfg.BaseURL = baseURL
+func NewOpenAI(apiKey, model, systemPrompt string) OpenAI {
 	return OpenAI{
 		model:        model,
 		systemPrompt: systemPrompt,
-		client:       goopenai.NewClientWithConfig(cfg),
+		client:       goopenai.NewClient(apiKey),
 	}
 }
 
