@@ -47,6 +47,11 @@ type openaiConfig struct {
 	BaseURL       string `yaml:"baseURL"`
 }
 
+type openrouterConfig struct {
+	BaseLLMConfig `yaml:",inline"`
+	APIKey        string `yaml:"apiKey"`
+}
+
 type mcpSSEServerConfig struct {
 	URL string `yaml:"url"`
 }
@@ -79,10 +84,6 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	if !ok {
 		return fmt.Errorf("llm provider is required")
 	}
-	genTitleLLMProvider, ok := rawConfig.GenTitleLLM["provider"].(string)
-	if !ok {
-		return fmt.Errorf("genTitleLLM provider is required")
-	}
 
 	llmRawYAML, err := yaml.Marshal(rawConfig.LLM)
 	if err != nil {
@@ -101,6 +102,8 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 		llm = &anthropicConfig{}
 	case "openai":
 		llm = &openaiConfig{}
+	case "openrouter":
+		llm = &openrouterConfig{}
 	default:
 		return fmt.Errorf("unknown llm provider: %s", llmProvider)
 	}
@@ -110,17 +113,21 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	var genTitleLLM llmConfig
-	useSameLLM := false
-	switch genTitleLLMProvider {
-	case "ollama":
-		genTitleLLM = &ollamaConfig{}
-	case "anthropic":
-		genTitleLLM = &anthropicConfig{}
-	case "openai":
-		genTitleLLM = &openaiConfig{}
-	default:
-		useSameLLM = true
-		genTitleLLM = llm
+	useSameLLM := true
+	genTitleLLM = llm
+	genTitleLLMProvider, ok := rawConfig.GenTitleLLM["provider"].(string)
+	if ok {
+		useSameLLM = false
+		switch genTitleLLMProvider {
+		case "ollama":
+			genTitleLLM = &ollamaConfig{}
+		case "anthropic":
+			genTitleLLM = &anthropicConfig{}
+		case "openai":
+			genTitleLLM = &openaiConfig{}
+		case "openrouter":
+			genTitleLLM = &openrouterConfig{}
+		}
 	}
 
 	if !useSameLLM {
@@ -202,4 +209,24 @@ func (o openaiConfig) llm(systemPrompt string) (handlers.LLM, error) {
 
 func (o openaiConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
 	return o.newOpenAI(systemPrompt)
+}
+
+func (o openrouterConfig) newOpenRouter(systemPrompt string) (services.OpenRouter, error) {
+	if o.Model == "" {
+		return services.OpenRouter{}, fmt.Errorf("model is required")
+	}
+
+	apiKey := o.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("OPENROUTER_API_KEY")
+	}
+	return services.NewOpenRouter(apiKey, o.Model, systemPrompt), nil
+}
+
+func (o openrouterConfig) llm(systemPrompt string) (handlers.LLM, error) {
+	return o.newOpenRouter(systemPrompt)
+}
+
+func (o openrouterConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
+	return o.newOpenRouter(systemPrompt)
 }
