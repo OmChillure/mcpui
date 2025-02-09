@@ -1,9 +1,11 @@
 github.com/MegaGrindStone/go-mcp v0.4.2 h1:pLhzYen/KETOZGnGRIvfbecMjhNQHP2+F69o6DbM9e0=
 github.com/MegaGrindStone/go-mcp v0.4.2/go.mod h1:sTwMIZUB7zLGUHhG8mhYNMCL3HRhj9QDiV4QLBrTH8o=
-github.com/MegaGrindStone/go-mcp v0.4.3-0.20250129165202-63774c5dee38 h1:QQISgjwAmFzj8LhePiDrolgCxe54TZkYJJGbvt2ATu0=
-github.com/MegaGrindStone/go-mcp v0.4.3-0.20250129165202-63774c5dee38/go.mod h1:sTwMIZUB7zLGUHhG8mhYNMCL3HRhj9QDiV4QLBrTH8o=
-github.com/MegaGrindStone/go-mcp v0.4.3-0.20250205102227-e884e0e1b4d6 h1:dZ0N4KRT/9vae3MfRD6ct6paGxcgRVln3NXU4PXbQS8=
-github.com/MegaGrindStone/go-mcp v0.4.3-0.20250205102227-e884e0e1b4d6/go.mod h1:sTwMIZUB7zLGUHhG8mhYNMCL3HRhj9QDiV4QLBrTH8o=
+github.com/MegaGrindStone/go-mcp v0.4.3-0.20250207234215-a96f73ea23bc h1:Q9woaq475f9rF9lzmfUibvhoyX3yqgHeh3+D4fNgKGo=
+github.com/MegaGrindStone/go-mcp v0.4.3-0.20250207234215-a96f73ea23bc/go.mod h1:sTwMIZUB7zLGUHhG8mhYNMCL3HRhj9QDiV4QLBrTH8o=
+github.com/MegaGrindStone/go-mcp v0.4.3-0.20250208001456-2ef87e9396af h1:OQpzKzGuHcuJYBoomF0nfHZ+DPXuEpEsj7IYaKQo/Uo=
+github.com/MegaGrindStone/go-mcp v0.4.3-0.20250208001456-2ef87e9396af/go.mod h1:sTwMIZUB7zLGUHhG8mhYNMCL3HRhj9QDiV4QLBrTH8o=
+github.com/MegaGrindStone/go-mcp v0.5.0 h1:+Kn18567Br0EZ8bZvXzO4Jmo1qyo/RJ8I6YMsW+RC/U=
+github.com/MegaGrindStone/go-mcp v0.5.0/go.mod h1:sTwMIZUB7zLGUHhG8mhYNMCL3HRhj9QDiV4QLBrTH8o=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=

@@ -20,11 +20,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type stdIOClient struct {
-	cmd       *exec.Cmd
-	transport mcp.StdIO
-}
-
 func main() {
 	cfg, cfgDir := loadConfig()
 
@@ -56,7 +51,7 @@ func main() {
 		Version: "0.1.0",
 	}
 
-	mcpClients, stdIOClients := populateMCPClients(cfg, mcpClientInfo)
+	mcpClients, stdIOCmds := populateMCPClients(cfg, mcpClientInfo)
 
 	var mcpCancels []context.CancelFunc
 	for i, cli := range mcpClients {
@@ -116,11 +111,11 @@ func main() {
 		for _, cancel := range mcpCancels {
 			cancel()
 		}
-		for _, ioCli := range stdIOClients {
-			ioCli.transport.Close()
-			if err := ioCli.cmd.Wait(); err != nil {
-				log.Printf("Failed to wait for stdIO command: %v", err)
+		for _, cmd := range stdIOCmds {
+			if err := cmd.Process.Kill(); err != nil {
+				log.Printf("Failed to kill stdIO command: %v", err)
 			}
+			_ = cmd.Wait()
 		}
 
 		if err := m.Shutdown(context.Background()); err != nil {
@@ -187,7 +182,7 @@ func loadConfig() (config, string) {
 	return cfg, cfgDir
 }
 
-func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []stdIOClient) {
+func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*exec.Cmd) {
 	var mcpClients []*mcp.Client
 
 	for _, mcpSSEServerConfig := range cfg.MCPSSEServers {
@@ -196,12 +191,10 @@ func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []st
 		mcpClients = append(mcpClients, cli)
 	}
 
-	var stdIOClients []stdIOClient
+	cmds := make([]*exec.Cmd, 0, len(cfg.MCPStdIOServers))
 	for _, mcpStdIOServerConfig := range cfg.MCPStdIOServers {
-		ioCli := stdIOClient{}
-
 		cmd := exec.Command(mcpStdIOServerConfig.Command, mcpStdIOServerConfig.Args...)
-		ioCli.cmd = cmd
+		cmds = append(cmds, cmd)
 
 		in, err := cmd.StdinPipe()
 		if err != nil {
@@ -216,12 +209,10 @@ func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []st
 		}
 
 		cliStdIO := mcp.NewStdIO(out, in)
-		ioCli.transport = cliStdIO
 
 		cli := mcp.NewClient(mcpClientInfo, cliStdIO)
 		mcpClients = append(mcpClients, cli)
-		stdIOClients = append(stdIOClients, ioCli)
 	}
 
-	return mcpClients, stdIOClients
+	return mcpClients, cmds
 }

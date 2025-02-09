@@ -9,7 +9,7 @@ require (
 )
 
 require (
-	github.com/MegaGrindStone/go-mcp v0.4.3-0.20250205102227-e884e0e1b4d6
+	github.com/MegaGrindStone/go-mcp v0.5.0
 	github.com/sashabaranov/go-openai v1.36.1
 	go.etcd.io/bbolt v1.3.11
 	gopkg.in/yaml.v3 v3.0.1
