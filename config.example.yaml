@@ -19,6 +19,9 @@ genTitleLLM: # Default to the same LLM as the main LLM
   model: claude-3-5-sonnet-20241022
   apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
   maxTokens: 1000
+mcpSSEServers:
+  filesystem:
+    url: https://yoursseserver.com
 mcpStdIOServers:
   filesystem:
     command: npx

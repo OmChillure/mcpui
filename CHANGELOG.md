@@ -17,3 +17,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Customizable system and title generation prompts.
 - Implement tools interaction for anthropic.
 - Own LLM for title generation.
+- Dockerfile
