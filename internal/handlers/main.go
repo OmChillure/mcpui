@@ -3,8 +3,8 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"html/template"
 	"iter"
+	"text/template"
 	"time"
 
 	"github.com/MegaGrindStone/go-mcp"

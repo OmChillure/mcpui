@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -67,59 +68,45 @@ const (
 	ContentTypeToolResult ContentType = "tool_result"
 )
 
-// RenderContents renders a slice of Content into a string.
-func RenderContents(contents []Content) string {
+// RenderContents renders a slice of Content into a string. If withDetail is true, it will render the contents
+// of call tools input and result wrapped with <details> tags.
+func RenderContents(contents []Content, withDetail bool) string {
 	var sb strings.Builder
-	idx := 0
-	for idx < len(contents) {
-		content := contents[idx]
+	for _, content := range contents {
 		switch content.Type {
 		case ContentTypeText:
 			if content.Text == "" {
-				idx++
 				continue
 			}
 			sb.WriteString(content.Text)
-			idx++
-			if idx >= len(contents) {
-				break
-			}
-			nextContent := contents[idx]
-			if nextContent.Type != ContentTypeCallTool {
-				return fmt.Sprintf("invalid content type %s at index %d, want %s", nextContent.Type, idx, ContentTypeCallTool)
-			}
-			sb.WriteString(fmt.Sprintf(`  
-        Calling Tool: %s  
-        Input: %s`, nextContent.ToolName, nextContent.ToolInput))
-			idx++
-			if idx >= len(contents) {
-				break
-			}
-			nextContent = contents[idx]
-			if nextContent.Type != ContentTypeToolResult {
-				return fmt.Sprintf("invalid content type %s at index %d, want %s", nextContent.Type, idx, ContentTypeToolResult)
-			}
-			sb.WriteString(fmt.Sprintf(`  
-        Result: %s  
-        `, nextContent.ToolResult))
-			idx++
 		case ContentTypeCallTool:
-			sb.WriteString(fmt.Sprintf(`Calling Tool: %s  
-    Input: %s`, content.ToolName, content.ToolInput))
-			idx++
-			if idx >= len(contents) {
-				break
+			sb.WriteString("  \n\n")
+			sb.WriteString(fmt.Sprintf("Calling Tool: %s  \n", content.ToolName))
+			if withDetail {
+				sb.WriteString("<details>  \n\n")
 			}
-			nextContent := contents[idx]
-			if nextContent.Type != ContentTypeToolResult {
-				return fmt.Sprintf("invalid content type %s at index %d, want %s", nextContent.Type, idx, ContentTypeToolResult)
+			sb.WriteString("Input:  \n")
+
+			var prettyJSON bytes.Buffer
+			input := string(content.ToolInput)
+			if err := json.Indent(&prettyJSON, content.ToolInput, "", "  "); err == nil {
+				input = prettyJSON.String()
 			}
-			sb.WriteString(fmt.Sprintf(`  
-        Result: %s  
-        `, nextContent.ToolResult))
-			idx++
+
+			sb.WriteString(fmt.Sprintf("```json  \n%s  \n```  \n", input))
 		case ContentTypeToolResult:
-			return fmt.Sprintf("unexpected content type %s at index %d", content.Type, idx)
+			sb.WriteString("  \n\n")
+			sb.WriteString("Result:  \n")
+
+			var prettyJSON bytes.Buffer
+			result := string(content.ToolResult)
+			if err := json.Indent(&prettyJSON, content.ToolResult, "", "  "); err == nil {
+				result = prettyJSON.String()
+			}
+			sb.WriteString(fmt.Sprintf("```json  \n%s  \n```  \n", result))
+			if withDetail {
+				sb.WriteString("</details>  \n")
+			}
 		}
 	}
 	return sb.String()

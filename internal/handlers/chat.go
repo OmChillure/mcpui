@@ -139,7 +139,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 			msgs[i] = message{
 				ID:             messages[i].ID,
 				Role:           string(messages[i].Role),
-				Content:        models.RenderContents(messages[i].Contents),
+				Content:        models.RenderContents(messages[i].Contents, true),
 				Timestamp:      messages[i].Timestamp,
 				StreamingState: streamingState,
 			}
@@ -159,7 +159,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	err = m.templates.ExecuteTemplate(w, "user_message", message{
 		ID:             userMsgID,
 		Role:           string(um.Role),
-		Content:        models.RenderContents(um.Contents),
+		Content:        models.RenderContents(um.Contents, true),
 		Timestamp:      um.Timestamp,
 		StreamingState: "ended",
 	})
@@ -171,7 +171,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	err = m.templates.ExecuteTemplate(w, "ai_message", message{
 		ID:             aiMsgID,
 		Role:           string(am.Role),
-		Content:        models.RenderContents(am.Contents),
+		Content:        models.RenderContents(am.Contents, true),
 		Timestamp:      am.Timestamp,
 		StreamingState: "loading",
 	})
@@ -254,7 +254,8 @@ func (m Main) chat(chatID string, messages []models.Message) {
 				return
 			}
 
-			msg.AppendData(models.RenderContents(aiMsg.Contents))
+			// TODO: find out why render markdown <details> tags is not working here.
+			msg.AppendData(models.RenderContents(aiMsg.Contents, false))
 			if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
 				log.Printf("Failed to publish message: %v", err)
 				return
