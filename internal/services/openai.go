@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
-	"log"
+	"log/slog"
 	"slices"
 
 	"github.com/MegaGrindStone/go-mcp"
@@ -21,14 +21,17 @@ type OpenAI struct {
 	systemPrompt string
 
 	client *goopenai.Client
+
+	logger *slog.Logger
 }
 
 // NewOpenAI creates a new OpenAI instance with the specified API key, base URL, model name, and system prompt.
-func NewOpenAI(apiKey, model, systemPrompt string) OpenAI {
+func NewOpenAI(apiKey, model, systemPrompt string, logger *slog.Logger) OpenAI {
 	return OpenAI{
 		model:        model,
 		systemPrompt: systemPrompt,
 		client:       goopenai.NewClient(apiKey),
+		logger:       logger.With(slog.String("module", "openai")),
 	}
 }
 
@@ -160,8 +163,10 @@ func (o OpenAI) Chat(
 			}
 			if len(res.ToolCalls) > 0 {
 				if len(res.ToolCalls) > 1 {
-					log.Printf("Received %d tool calls, but only the first one is supported", len(res.ToolCalls))
-					log.Printf("%+v", res.ToolCalls)
+					o.logger.Warn("Received multiples tool call, but only the first one is supported",
+						slog.Int("count", len(res.ToolCalls)),
+						slog.String("toolCalls", fmt.Sprintf("%+v", res.ToolCalls)),
+					)
 				}
 				toolArgs += res.ToolCalls[0].Function.Arguments
 				if !toolUse {
@@ -175,8 +180,10 @@ func (o OpenAI) Chat(
 			if toolArgs == "" {
 				toolArgs = "{}"
 			}
-			log.Printf("Tool Name: %s", callToolContent.ToolName)
-			log.Printf("toolArgs: %s", toolArgs)
+			o.logger.Debug("Call Tool",
+				slog.String("name", callToolContent.ToolName),
+				slog.String("args", toolArgs),
+			)
 			callToolContent.ToolInput = json.RawMessage(toolArgs)
 			yield(callToolContent, nil)
 		}

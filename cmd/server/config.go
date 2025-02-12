@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/MegaGrindStone/mcp-web-ui/internal/handlers"
@@ -10,8 +11,8 @@ import (
 )
 
 type llmConfig interface {
-	llm(string) (handlers.LLM, error)
-	titleGen(string) (handlers.TitleGenerator, error)
+	llm(string, *slog.Logger) (handlers.LLM, error)
+	titleGen(string, *slog.Logger) (handlers.TitleGenerator, error)
 }
 
 // BaseLLMConfig contains the common fields for all LLM configurations.
@@ -149,7 +150,7 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (o ollamaConfig) newOllama(systemPrompt string) (services.Ollama, error) {
+func (o ollamaConfig) newOllama(systemPrompt string, logger *slog.Logger) (services.Ollama, error) {
 	if o.Model == "" {
 		return services.Ollama{}, fmt.Errorf("model is required")
 	}
@@ -158,18 +159,18 @@ func (o ollamaConfig) newOllama(systemPrompt string) (services.Ollama, error) {
 	if host == "" {
 		host = os.Getenv("OLLAMA_HOST")
 	}
-	return services.NewOllama(host, o.Model, systemPrompt), nil
+	return services.NewOllama(host, o.Model, systemPrompt, logger), nil
 }
 
-func (o ollamaConfig) llm(systemPrompt string) (handlers.LLM, error) {
-	return o.newOllama(systemPrompt)
+func (o ollamaConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
+	return o.newOllama(systemPrompt, logger)
 }
 
-func (o ollamaConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
-	return o.newOllama(systemPrompt)
+func (o ollamaConfig) titleGen(systemPrompt string, logger *slog.Logger) (handlers.TitleGenerator, error) {
+	return o.newOllama(systemPrompt, logger)
 }
 
-func (a anthropicConfig) newAnthropic(systemPrompt string) (services.Anthropic, error) {
+func (a anthropicConfig) newAnthropic(systemPrompt string, _ *slog.Logger) (services.Anthropic, error) {
 	if a.Model == "" {
 		return services.Anthropic{}, fmt.Errorf("model is required")
 	}
@@ -184,15 +185,15 @@ func (a anthropicConfig) newAnthropic(systemPrompt string) (services.Anthropic, 
 	return services.NewAnthropic(apiKey, a.Model, systemPrompt, a.MaxTokens), nil
 }
 
-func (a anthropicConfig) llm(systemPrompt string) (handlers.LLM, error) {
-	return a.newAnthropic(systemPrompt)
+func (a anthropicConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
+	return a.newAnthropic(systemPrompt, logger)
 }
 
-func (a anthropicConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
-	return a.newAnthropic(systemPrompt)
+func (a anthropicConfig) titleGen(systemPrompt string, logger *slog.Logger) (handlers.TitleGenerator, error) {
+	return a.newAnthropic(systemPrompt, logger)
 }
 
-func (o openaiConfig) newOpenAI(systemPrompt string) (services.OpenAI, error) {
+func (o openaiConfig) newOpenAI(systemPrompt string, logger *slog.Logger) (services.OpenAI, error) {
 	if o.Model == "" {
 		return services.OpenAI{}, fmt.Errorf("model is required")
 	}
@@ -201,18 +202,18 @@ func (o openaiConfig) newOpenAI(systemPrompt string) (services.OpenAI, error) {
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
-	return services.NewOpenAI(apiKey, o.Model, systemPrompt), nil
+	return services.NewOpenAI(apiKey, o.Model, systemPrompt, logger), nil
 }
 
-func (o openaiConfig) llm(systemPrompt string) (handlers.LLM, error) {
-	return o.newOpenAI(systemPrompt)
+func (o openaiConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
+	return o.newOpenAI(systemPrompt, logger)
 }
 
-func (o openaiConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
-	return o.newOpenAI(systemPrompt)
+func (o openaiConfig) titleGen(systemPrompt string, logger *slog.Logger) (handlers.TitleGenerator, error) {
+	return o.newOpenAI(systemPrompt, logger)
 }
 
-func (o openrouterConfig) newOpenRouter(systemPrompt string) (services.OpenRouter, error) {
+func (o openrouterConfig) newOpenRouter(systemPrompt string, logger *slog.Logger) (services.OpenRouter, error) {
 	if o.Model == "" {
 		return services.OpenRouter{}, fmt.Errorf("model is required")
 	}
@@ -221,13 +222,13 @@ func (o openrouterConfig) newOpenRouter(systemPrompt string) (services.OpenRoute
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENROUTER_API_KEY")
 	}
-	return services.NewOpenRouter(apiKey, o.Model, systemPrompt), nil
+	return services.NewOpenRouter(apiKey, o.Model, systemPrompt, logger), nil
 }
 
-func (o openrouterConfig) llm(systemPrompt string) (handlers.LLM, error) {
-	return o.newOpenRouter(systemPrompt)
+func (o openrouterConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
+	return o.newOpenRouter(systemPrompt, logger)
 }
 
-func (o openrouterConfig) titleGen(systemPrompt string) (handlers.TitleGenerator, error) {
-	return o.newOpenRouter(systemPrompt)
+func (o openrouterConfig) titleGen(systemPrompt string, logger *slog.Logger) (handlers.TitleGenerator, error) {
+	return o.newOpenRouter(systemPrompt, logger)
 }

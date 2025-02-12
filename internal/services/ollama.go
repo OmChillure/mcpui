@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -24,12 +24,14 @@ type Ollama struct {
 	systemPrompt string
 
 	client *api.Client
+
+	logger *slog.Logger
 }
 
 // NewOllama creates a new Ollama instance with the specified host URL and model name. The host
 // parameter should be a valid URL pointing to an Ollama server. If the provided host URL is invalid,
 // the function will panic.
-func NewOllama(host, model, systemPrompt string) Ollama {
+func NewOllama(host, model, systemPrompt string, logger *slog.Logger) Ollama {
 	u, err := url.Parse(host)
 	if err != nil {
 		panic(err)
@@ -40,6 +42,7 @@ func NewOllama(host, model, systemPrompt string) Ollama {
 		model:        model,
 		systemPrompt: systemPrompt,
 		client:       api.NewClient(u, &http.Client{}),
+		logger:       logger.With(slog.String("module", "ollama")),
 	}
 }
 
@@ -172,8 +175,10 @@ func (o Ollama) Chat(
 					return fmt.Errorf("error marshaling tool arguments: %w", err)
 				}
 				if len(res.Message.ToolCalls) > 1 {
-					log.Printf("Received %d tool calls, but only the first one is supported", len(res.Message.ToolCalls))
-					log.Printf("%+v", res.Message.ToolCalls)
+					o.logger.Warn("Received multiples tool call, but only the first one is supported",
+						slog.Int("count", len(res.Message.ToolCalls)),
+						slog.String("toolCalls", fmt.Sprintf("%+v", res.Message.ToolCalls)),
+					)
 				}
 				if !yield(models.Content{
 					Type:      models.ContentTypeCallTool,

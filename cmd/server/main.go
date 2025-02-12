@@ -31,7 +31,7 @@ func main() {
 	if sysPrompt == "" {
 		sysPrompt = "You are a helpful assistant."
 	}
-	llm, err := cfg.LLM.llm(sysPrompt)
+	llm, err := cfg.LLM.llm(sysPrompt, logger)
 	if err != nil {
 		panic(err)
 	}
@@ -39,7 +39,7 @@ func main() {
 	if titleGenPrompt == "" {
 		titleGenPrompt = "Generate a title for this chat with only one sentence with maximum 5 words."
 	}
-	titleGen, err := cfg.GenTitleLLM.titleGen(titleGenPrompt)
+	titleGen, err := cfg.GenTitleLLM.titleGen(titleGenPrompt, logger)
 	if err != nil {
 		panic(err)
 	}

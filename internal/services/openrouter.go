@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -23,6 +24,8 @@ type OpenRouter struct {
 	systemPrompt string
 
 	client *http.Client
+
+	logger *slog.Logger
 }
 
 type openRouterChatRequest struct {
@@ -82,12 +85,13 @@ const (
 )
 
 // NewOpenRouter creates a new OpenRouter instance with the specified API key, model name, and system prompt.
-func NewOpenRouter(apiKey, model, systemPrompt string) OpenRouter {
+func NewOpenRouter(apiKey, model, systemPrompt string, logger *slog.Logger) OpenRouter {
 	return OpenRouter{
 		apiKey:       apiKey,
 		model:        model,
 		systemPrompt: systemPrompt,
 		client:       &http.Client{},
+		logger:       logger.With(slog.String("module", "openrouter")),
 	}
 }
 
@@ -130,6 +134,12 @@ func (o OpenRouter) Chat(
 			}
 			choice := res.Choices[0]
 			if len(choice.Delta.ToolCalls) > 0 {
+				if len(choice.Delta.ToolCalls) > 1 {
+					o.logger.Warn("Received multiples tool call, but only the first one is supported",
+						slog.Int("count", len(choice.Delta.ToolCalls)),
+						slog.String("toolCalls", fmt.Sprintf("%+v", choice.Delta.ToolCalls)),
+					)
+				}
 				args := choice.Delta.ToolCalls[0].Function.Arguments
 				if args == "" {
 					args = "{}"
