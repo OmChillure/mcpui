@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,6 +23,9 @@ import (
 
 func main() {
 	cfg, cfgDir := loadConfig()
+
+	logger, logFile := initLogger(cfg, cfgDir)
+	defer logFile.Close()
 
 	sysPrompt := cfg.SystemPrompt
 	if sysPrompt == "" {
@@ -55,7 +59,7 @@ func main() {
 
 	var mcpCancels []context.CancelFunc
 	for i, cli := range mcpClients {
-		log.Printf("Connecting to MCP server at index %d", i)
+		logger.Info("Connecting to MCP server", slog.Int("index", i))
 
 		connectCtx, connectCancel := context.WithCancel(context.Background())
 		mcpCancels = append(mcpCancels, connectCancel)
@@ -71,16 +75,16 @@ func main() {
 
 		select {
 		case err := <-errs:
-			panic(err)
+			logger.Error("Error connecting to MCP server", slog.Int("index", i), slog.String("err", err.Error()))
 		case <-ready:
 		}
 
 		mcpClients[i] = cli
 
-		log.Printf("Connected to MCP server %s", mcpClients[i].ServerInfo().Name)
+		logger.Info("Connected to MCP server", slog.String("name", mcpClients[i].ServerInfo().Name))
 	}
 
-	m, err := handlers.NewMain(llm, titleGen, boltDB, mcpClients)
+	m, err := handlers.NewMain(llm, titleGen, boltDB, mcpClients, logger)
 	if err != nil {
 		panic(err)
 	}
@@ -113,13 +117,13 @@ func main() {
 		}
 		for _, cmd := range stdIOCmds {
 			if err := cmd.Process.Kill(); err != nil {
-				log.Printf("Failed to kill stdIO command: %v", err)
+				logger.Error("Failed to kill stdIO command", slog.String("err", err.Error()))
 			}
 			_ = cmd.Wait()
 		}
 
 		if err := m.Shutdown(context.Background()); err != nil {
-			log.Printf("Failed to shutdown sse server: %v", err)
+			logger.Error("Failed to shutdown sse server", slog.String("err", err.Error()))
 		}
 	})
 
@@ -128,7 +132,7 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Println("Server starting on :" + cfg.Port)
+		logger.Info("Server starting on", slog.String("port", cfg.Port))
 		serverErrors <- srv.ListenAndServe()
 	}()
 
@@ -139,10 +143,10 @@ func main() {
 	// Blocking select waiting for either interrupt or server error
 	select {
 	case err := <-serverErrors:
-		log.Printf("Server error: %v", err)
+		logger.Error("Server error", slog.String("err", err.Error()))
 
 	case sig := <-shutdown:
-		log.Printf("Start shutdown, signal: %v", sig)
+		logger.Info("Start shutdown", slog.String("signal", sig.String()))
 
 		// Create context with timeout for shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -150,9 +154,10 @@ func main() {
 
 		// Gracefully shutdown the server
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("Graceful shutdown failed: %v", err)
+			logger.Error("Graceful shutdown failed", slog.String("err", err.Error()))
+			logger.Info("Forcing server close")
 			if err := srv.Close(); err != nil {
-				log.Printf("Forcing server close: %v", err)
+				logger.Error("Failed to forcing server close", slog.String("err", err.Error()))
 			}
 		}
 	}
@@ -180,6 +185,67 @@ func loadConfig() (config, string) {
 		panic(fmt.Errorf("error decoding config file: %w", err))
 	}
 	return cfg, cfgDir
+}
+
+func initLogger(cfg config, cfgDir string) (*slog.Logger, *os.File) {
+	logLevel := new(slog.LevelVar)
+	switch cfg.LogLevel {
+	case "debug":
+		logLevel.Set(slog.LevelDebug)
+	case "info":
+		logLevel.Set(slog.LevelInfo)
+	case "warn":
+		logLevel.Set(slog.LevelWarn)
+	case "error":
+		logLevel.Set(slog.LevelError)
+	default:
+		log.Printf("Invalid log level '%s', defaulting to 'info'", cfg.LogLevel)
+		logLevel.Set(slog.LevelInfo)
+	}
+
+	logFile, err := os.Create(filepath.Join(cfgDir, "mcpwebui/mcpwebui.log"))
+	if err != nil {
+		log.Fatalf("Error creating log file: %v", err)
+	}
+
+	var lg *slog.Logger
+	switch cfg.LogMode {
+	case "json":
+		lg = slog.New(slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: logLevel}))
+	default:
+		lg = slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{Level: logLevel}))
+	}
+
+	// llmJSON, err := json.Marshal(cfg.LLM)
+	// if err != nil {
+	// 	log.Fatalf("Error marshaling LLM config: %v", err)
+	// }
+	//
+	// titleGenJSON, err := json.Marshal(cfg.GenTitleLLM)
+	// if err != nil {
+	// 	log.Fatalf("Error marshaling title generator config: %v", err)
+	// }
+
+	logger := lg.With(
+		slog.Group("config",
+			slog.String("port", cfg.Port),
+			slog.String("logLevel", cfg.LogLevel),
+			slog.String("logMode", cfg.LogMode),
+
+			// These two configuration can be very long, and would potenially fill up the log file.
+			// slog.String("systemPrompt", cfg.SystemPrompt),
+			// slog.String("titleGeneratorPrompt", cfg.TitleGeneratorPrompt),
+
+			// These two configuration would leak the llm credentials in the log file.
+			// slog.Any("llm", llmJSON),
+			// slog.Any("genTitleLLM", titleGenJSON),
+
+			slog.Any("mcpSSEServers", cfg.MCPSSEServers),
+			slog.Any("mcpStdIOServers", cfg.MCPStdIOServers),
+		),
+	)
+
+	return logger, logFile
 }
 
 func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*exec.Cmd) {

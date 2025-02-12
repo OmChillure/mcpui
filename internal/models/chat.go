@@ -111,3 +111,29 @@ func RenderContents(contents []Content, withDetail bool) string {
 	}
 	return sb.String()
 }
+
+// String returns a string representation of the Content.
+//
+// The reason for this function is to make sure the json.RawMessage fields of c is
+// rendered as a string, make it easier to debug.
+func (c Content) String() string {
+	type content struct {
+		Type           ContentType
+		Text           string
+		ToolName       string
+		ToolInput      string
+		ToolResult     string
+		CallToolID     string
+		CallToolFailed bool
+	}
+	nc := content{
+		Type:           c.Type,
+		Text:           c.Text,
+		ToolName:       c.ToolName,
+		ToolInput:      string(c.ToolInput),
+		ToolResult:     string(c.ToolResult),
+		CallToolID:     c.CallToolID,
+		CallToolFailed: c.CallToolFailed,
+	}
+	return fmt.Sprintf("%+v", nc)
+}

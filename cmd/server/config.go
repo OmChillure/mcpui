@@ -22,6 +22,8 @@ type BaseLLMConfig struct {
 
 type config struct {
 	Port                 string                          `yaml:"port"`
+	LogLevel             string                          `yaml:"logLevel"`
+	LogMode              string                          `yaml:"logMode"`
 	SystemPrompt         string                          `yaml:"systemPrompt"`
 	TitleGeneratorPrompt string                          `yaml:"titleGeneratorPrompt"`
 	LLM                  llmConfig                       `yaml:"llm"`
@@ -63,6 +65,8 @@ type mcpStdIOServerConfig struct {
 func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	var rawConfig struct {
 		Port                 string                          `yaml:"port"`
+		LogLevel             string                          `yaml:"logLevel"`
+		LogMode              string                          `yaml:"logMode"`
 		SystemPrompt         string                          `yaml:"systemPrompt"`
 		TitleGeneratorPrompt string                          `yaml:"titleGeneratorPrompt"`
 		LLM                  map[string]any                  `yaml:"llm"`
@@ -76,6 +80,8 @@ func (c *config) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	c.Port = rawConfig.Port
+	c.LogLevel = rawConfig.LogLevel
+	c.LogMode = rawConfig.LogMode
 	c.SystemPrompt = rawConfig.SystemPrompt
 	c.TitleGeneratorPrompt = rawConfig.TitleGeneratorPrompt
 

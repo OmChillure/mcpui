@@ -1,4 +1,6 @@
 port: 8080
+logLevel: info # Choose one of the following: debug, info, warn, error, default to info
+logMode: text # Choose one of the following: json, text, default to text
 systemPrompt: You are a helpful assistant.
 titleGeneratorPrompt: Generate a title for this chat with only one sentence with maximum 5 words.
 # Choose one of the following LLM providers: ollama, anthropic

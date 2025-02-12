@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -62,12 +62,14 @@ func callToolError(err error) json.RawMessage {
 // for new chats or individual message templates for existing chats.
 func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		m.logger.Error("Method not allowed", slog.String("method", r.Method))
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	msg := r.FormValue("message")
 	if msg == "" {
+		m.logger.Error("Message is required")
 		http.Error(w, "Message is required", http.StatusBadRequest)
 		return
 	}
@@ -80,6 +82,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	if chatID == "" {
 		chatID, err = m.newChat()
 		if err != nil {
+			m.logger.Error("Failed to create new chat", slog.String(errLoggerKey, err.Error()))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -100,6 +103,9 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	}
 	userMsgID, err := m.store.AddMessage(r.Context(), chatID, um)
 	if err != nil {
+		m.logger.Error("Failed to add user message",
+			slog.String("msg", fmt.Sprintf("%+v", um)),
+			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -112,12 +118,18 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	}
 	aiMsgID, err := m.store.AddMessage(r.Context(), chatID, am)
 	if err != nil {
+		m.logger.Error("Failed to add AI message",
+			slog.String("msg", fmt.Sprintf("%+v", am)),
+			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	messages, err := m.store.Messages(r.Context(), chatID)
 	if err != nil {
+		m.logger.Error("Failed to get messages",
+			slog.String("chatID", chatID),
+			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -232,10 +244,13 @@ func (m Main) chat(chatID string, messages []models.Message) {
 				Type: messagesSSEType,
 			}
 			if err != nil {
+				m.logger.Error("Error from llm provider", slog.String(errLoggerKey, err.Error()))
 				msg.AppendData(err.Error())
 				_ = m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID))
 				return
 			}
+
+			m.logger.Debug("LLM response", slog.String("content", fmt.Sprintf("%+v", content)))
 
 			switch content.Type {
 			case models.ContentTypeText:
@@ -245,19 +260,27 @@ func (m Main) chat(chatID string, messages []models.Message) {
 				aiMsg.Contents = append(aiMsg.Contents, content)
 				contentIdx++
 			case models.ContentTypeToolResult:
-				log.Printf("Content type tool results is not allowed")
+				m.logger.Error("Content type tool results is not allowed")
 				return
 			}
 
 			if err := m.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
-				log.Printf("Failed to save message content: %v", err)
+				m.logger.Error("Failed to update message",
+					slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+					slog.String(errLoggerKey, err.Error()))
 				return
 			}
 
 			// TODO: find out why render markdown <details> tags is not working here.
-			msg.AppendData(models.RenderContents(aiMsg.Contents, false))
+			rc := models.RenderContents(aiMsg.Contents, false)
+			m.logger.Debug("Render contents",
+				slog.String("origMsg", fmt.Sprintf("%+v", aiMsg.Contents)),
+				slog.String("renderedMsg", rc))
+			msg.AppendData(rc)
 			if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
-				log.Printf("Failed to publish message: %v", err)
+				m.logger.Error("Failed to publish message",
+					slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+					slog.String(errLoggerKey, err.Error()))
 				return
 			}
 
@@ -279,6 +302,7 @@ func (m Main) chat(chatID string, messages []models.Message) {
 
 		clientIdx, ok := m.toolsMap[callToolContent.ToolName]
 		if !ok {
+			m.logger.Error("Tool not found", slog.String("toolName", callToolContent.ToolName))
 			toolResContent.ToolResult = callToolError(fmt.Errorf("tool %s is not found", callToolContent.ToolName))
 			toolResContent.CallToolFailed = true
 			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
@@ -292,6 +316,9 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			Arguments: callToolContent.ToolInput,
 		})
 		if err != nil {
+			m.logger.Error("Tool call failed",
+				slog.String("toolName", callToolContent.ToolName),
+				slog.String(errLoggerKey, err.Error()))
 			toolResContent.ToolResult = callToolError(fmt.Errorf("tool call failed: %w", err))
 			toolResContent.CallToolFailed = true
 			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
@@ -302,6 +329,9 @@ func (m Main) chat(chatID string, messages []models.Message) {
 
 		resContent, err := json.Marshal(toolRes.Content)
 		if err != nil {
+			m.logger.Error("Failed to marshal tool result content",
+				slog.String("toolName", callToolContent.ToolName),
+				slog.String(errLoggerKey, err.Error()))
 			toolResContent.ToolResult = callToolError(fmt.Errorf("failed to marshal content: %w", err))
 			toolResContent.CallToolFailed = true
 			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
@@ -309,6 +339,10 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			messages[len(messages)-1] = aiMsg
 			continue
 		}
+
+		m.logger.Debug("Tool result content",
+			slog.String("toolName", callToolContent.ToolName),
+			slog.String("toolResult", string(resContent)))
 
 		toolResContent.ToolResult = resContent
 		toolResContent.CallToolFailed = toolRes.IsError
@@ -321,7 +355,9 @@ func (m Main) chat(chatID string, messages []models.Message) {
 func (m Main) generateChatTitle(chatID string, message string) {
 	title, err := m.titleGenerator.GenerateTitle(context.Background(), message)
 	if err != nil {
-		log.Printf("Error generating chat title: %v", err)
+		m.logger.Error("Error generating chat title",
+			slog.String("msg", message),
+			slog.String(errLoggerKey, err.Error()))
 		return
 	}
 
@@ -330,13 +366,15 @@ func (m Main) generateChatTitle(chatID string, message string) {
 		Title: title,
 	}
 	if err := m.store.UpdateChat(context.Background(), updatedChat); err != nil {
-		log.Printf("Failed to update chat title: %v", err)
+		m.logger.Error("Failed to update chat title",
+			slog.String(errLoggerKey, err.Error()))
 		return
 	}
 
 	divs, err := m.chatDivs(chatID)
 	if err != nil {
-		log.Printf("Failed to generate chat title: %v", err)
+		m.logger.Error("Failed to generate chat divs",
+			slog.String(errLoggerKey, err.Error()))
 		return
 	}
 
@@ -345,7 +383,8 @@ func (m Main) generateChatTitle(chatID string, message string) {
 	}
 	msg.AppendData(divs)
 	if err := m.sseSrv.Publish(&msg, chatsSSETopic); err != nil {
-		log.Printf("Failed to publish chats: %v", err)
+		m.logger.Error("Failed to publish chats",
+			slog.String(errLoggerKey, err.Error()))
 	}
 }
 

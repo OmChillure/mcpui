@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -30,7 +31,7 @@ func TestNewMain(t *testing.T) {
 	llm := &mockLLM{}
 	store := &mockStore{}
 
-	main, err := handlers.NewMain(llm, llm, store, nil)
+	main, err := handlers.NewMain(llm, llm, store, nil, slog.Default())
 	if err != nil {
 		t.Fatalf("NewMain() error = %v", err)
 	}
@@ -56,7 +57,7 @@ func TestHandleHome(t *testing.T) {
 		},
 	}
 
-	main, err := handlers.NewMain(llm, llm, store, nil)
+	main, err := handlers.NewMain(llm, llm, store, nil, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +106,7 @@ func TestHandleChats(t *testing.T) {
 		messages: map[string][]models.Message{},
 	}
 
-	main, err := handlers.NewMain(llm, llm, store, nil)
+	main, err := handlers.NewMain(llm, llm, store, nil, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

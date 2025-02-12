@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -25,6 +27,7 @@ type homePageData struct {
 func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 	cs, err := m.store.Chats(r.Context())
 	if err != nil {
+		m.logger.Error("Failed to get chats", slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -57,15 +60,20 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 		// setting initial streaming state to "ended" for all messages
 		ms, err := m.store.Messages(r.Context(), currentChatID)
 		if err != nil {
+			m.logger.Error("Failed to get messages", slog.String(errLoggerKey, err.Error()))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		messages = make([]message, len(ms))
 		for i := range ms {
+			rc := models.RenderContents(ms[i].Contents, true)
+			m.logger.Debug("Render contents",
+				slog.String("origMsg", fmt.Sprintf("%+v", ms[i].Contents)),
+				slog.String("renderedMsg", rc))
 			messages[i] = message{
 				ID:             ms[i].ID,
 				Role:           string(ms[i].Role),
-				Content:        models.RenderContents(ms[i].Contents, true),
+				Content:        rc,
 				Timestamp:      ms[i].Timestamp,
 				StreamingState: "ended",
 			}
@@ -82,6 +90,7 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := m.templates.ExecuteTemplate(w, "home.html", data); err != nil {
+		m.logger.Error("Failed to execute home template", slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

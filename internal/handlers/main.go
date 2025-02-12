@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"log/slog"
 	"text/template"
 	"time"
 
@@ -55,14 +56,24 @@ type Main struct {
 	prompts   []mcp.Prompt
 
 	toolsMap map[string]int // Map of tool names to mcpClients index.
+	logger   *slog.Logger
 }
 
-const chatsSSETopic = "chats"
+const (
+	chatsSSETopic = "chats"
+	errLoggerKey  = "err"
+)
 
 // NewMain creates a new Main instance with the provided LLM and Store implementations. It initializes
 // the SSE server with default configurations and parses the required HTML templates from the embedded
 // filesystem. The SSE server is configured to handle both default events and chat-specific topics.
-func NewMain(llm LLM, titleGen TitleGenerator, store Store, mcpClients []*mcp.Client) (Main, error) {
+func NewMain(
+	llm LLM,
+	titleGen TitleGenerator,
+	store Store,
+	mcpClients []*mcp.Client,
+	logger *slog.Logger,
+) (Main, error) {
 	// We parse templates from three distinct directories to separate layout, pages, and partial views
 	tmpl, err := template.ParseFS(
 		mcpwebui.TemplateFS,
@@ -143,6 +154,7 @@ func NewMain(llm LLM, titleGen TitleGenerator, store Store, mcpClients []*mcp.Cl
 		store:          store,
 		mcpClients:     mcpClients,
 		toolsMap:       tm,
+		logger:         logger.With(slog.String("module", "main")),
 		servers:        servers,
 		tools:          tools,
 		resources:      resources,
