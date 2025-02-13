@@ -116,7 +116,8 @@ func RenderContents(contents []Content) (string, error) {
 			),
 		),
 		goldmark.WithRendererOptions(
-			html.WithUnsafe(), // To render details tag.
+			html.WithHardWraps(), // To render newlines.
+			html.WithUnsafe(),    // To render details tag.
 		),
 	)
 

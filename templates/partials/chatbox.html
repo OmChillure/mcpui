@@ -12,19 +12,32 @@
     <!-- Message Input Form -->
     <div class="card-footer">
         <form class="d-flex gap-2" 
+              id="chat-form-chatbox"
               hx-post="/chats"
               hx-target="#chat-messages"
               hx-swap="beforeend"
               hx-trigger="submit"
               hx-on::after-request="this.reset(); document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight">
-            <input type="text" 
-                    class="form-control" 
+            <div class="position-relative flex-grow-1">
+                <textarea 
+                    class="form-control auto-expand" 
                     name="message"
                     autocomplete="off"
                     placeholder="Type your message..."
-                    required>
+                    rows="3"
+                    required
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    title="Press Shift+Enter for new line"
+                    onkeydown="handleKeyPress(event, '#chat-form-chatbox')"
+                    style="min-height: 38px; max-height: 200px; resize: none;"
+                    ></textarea>
+                <small class="text-muted position-absolute end-0 bottom-100 mb-1">
+                    Shift+Enter for new line
+                </small>
+            </div>
             <input type="hidden" name="chat_id" value="{{$.CurrentChatID}}">
-            <button type="submit" class="btn btn-primary">Send</button>
+            <button type="submit" class="btn btn-primary align-self-center" style="height: 38px;">Send</button>
         </form>
     </div>
 </div>

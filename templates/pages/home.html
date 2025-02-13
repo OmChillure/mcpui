@@ -157,5 +157,21 @@ function showServerModal(serverName) {
     const modal = new bootstrap.Modal(document.getElementById('serverModal'));
     modal.show();
 }
+
+function handleKeyPress(event, formID) {
+    if (event.key === 'Enter') {
+        if (!event.shiftKey) {
+            event.preventDefault();
+            htmx.trigger(formID, 'submit');
+        }
+    }
+    // Auto-expand height
+    adjustHeight(event.target);
+}
+
+function adjustHeight(element) {
+    element.style.height = 'auto';
+    element.style.height = (element.scrollHeight) + 'px';
+}
 </script>
 {{end}}
