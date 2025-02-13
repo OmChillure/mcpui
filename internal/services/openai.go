@@ -121,6 +121,8 @@ func (o OpenAI) Chat(
 			Tools:    oTools,
 		}
 
+		o.logger.Debug("Request", slog.String("req", fmt.Sprintf("%+v", req)))
+
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 

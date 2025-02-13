@@ -285,6 +285,8 @@ func (o OpenRouter) doRequest(
 		Tools:    oTools,
 	}
 
+	o.logger.Debug("Request Body", slog.String("body", fmt.Sprintf("%+v", reqBody)))
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %w", err)
