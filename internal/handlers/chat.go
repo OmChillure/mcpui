@@ -262,6 +262,8 @@ func (m Main) chat(chatID string, messages []models.Message) {
 		})
 		contentIdx++
 		callTool := false
+		badToolInputFlag := false
+		badToolInput := json.RawMessage("{}")
 
 		for content, err := range it {
 			msg := sse.Message{
@@ -280,6 +282,16 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			case models.ContentTypeText:
 				aiMsg.Contents[contentIdx].Text += content.Text
 			case models.ContentTypeCallTool:
+				// Non-anthropic models sometimes give a bad tool input which can't be json-marshalled, and it would lead to failure
+				// when the store try to save the message. So we check if the tool input is valid json, and if not, we set a flag
+				// to inform the models that the tool input is invalid. And to avoid save failure, we change the tool input to
+				// empty json string.
+				_, err := json.Marshal(content.ToolInput)
+				if err != nil {
+					badToolInputFlag = true
+					badToolInput = content.ToolInput
+					content.ToolInput = []byte("{}")
+				}
 				callTool = true
 				aiMsg.Contents = append(aiMsg.Contents, content)
 				contentIdx++
@@ -333,6 +345,15 @@ func (m Main) chat(chatID string, messages []models.Message) {
 		if !ok {
 			m.logger.Error("Tool not found", slog.String("toolName", callToolContent.ToolName))
 			toolResContent.ToolResult = callToolError(fmt.Errorf("tool %s is not found", callToolContent.ToolName))
+			toolResContent.CallToolFailed = true
+			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
+			contentIdx++
+			messages[len(messages)-1] = aiMsg
+			continue
+		}
+
+		if badToolInputFlag {
+			toolResContent.ToolResult = callToolError(fmt.Errorf("tool input %s is not valid json", string(badToolInput)))
 			toolResContent.CallToolFailed = true
 			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
 			contentIdx++
