@@ -69,7 +69,7 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 			rc, err := models.RenderContents(ms[i].Contents)
 			if err != nil {
 				m.logger.Error("Failed to render contents",
-					slog.String("msg", fmt.Sprintf("%+v", ms[i])),
+					slog.String("message", fmt.Sprintf("%+v", ms[i])),
 					slog.String(errLoggerKey, err.Error()))
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

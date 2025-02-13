@@ -104,7 +104,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	userMsgID, err := m.store.AddMessage(r.Context(), chatID, um)
 	if err != nil {
 		m.logger.Error("Failed to add user message",
-			slog.String("msg", fmt.Sprintf("%+v", um)),
+			slog.String("message", fmt.Sprintf("%+v", um)),
 			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -119,7 +119,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	aiMsgID, err := m.store.AddMessage(r.Context(), chatID, am)
 	if err != nil {
 		m.logger.Error("Failed to add AI message",
-			slog.String("msg", fmt.Sprintf("%+v", am)),
+			slog.String("message", fmt.Sprintf("%+v", am)),
 			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -151,7 +151,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 			content, err := models.RenderContents(messages[i].Contents)
 			if err != nil {
 				m.logger.Error("Failed to render contents",
-					slog.String("msg", fmt.Sprintf("%+v", messages[i])),
+					slog.String("message", fmt.Sprintf("%+v", messages[i])),
 					slog.String(errLoggerKey, err.Error()))
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -179,7 +179,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	userContent, err := models.RenderContents(um.Contents)
 	if err != nil {
 		m.logger.Error("Failed to render contents",
-			slog.String("msg", fmt.Sprintf("%+v", um)),
+			slog.String("message", fmt.Sprintf("%+v", um)),
 			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -199,7 +199,7 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 	aiContent, err := models.RenderContents(am.Contents)
 	if err != nil {
 		m.logger.Error("Failed to render contents",
-			slog.String("msg", fmt.Sprintf("%+v", am)),
+			slog.String("message", fmt.Sprintf("%+v", am)),
 			slog.String(errLoggerKey, err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -290,7 +290,7 @@ func (m Main) chat(chatID string, messages []models.Message) {
 
 			if err := m.store.UpdateMessage(context.Background(), chatID, aiMsg); err != nil {
 				m.logger.Error("Failed to update message",
-					slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+					slog.String("message", fmt.Sprintf("%+v", aiMsg)),
 					slog.String(errLoggerKey, err.Error()))
 				return
 			}
@@ -298,7 +298,7 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			rc, err := models.RenderContents(aiMsg.Contents)
 			if err != nil {
 				m.logger.Error("Failed to render contents",
-					slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+					slog.String("message", fmt.Sprintf("%+v", aiMsg)),
 					slog.String(errLoggerKey, err.Error()))
 				return
 			}
@@ -308,7 +308,7 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			msg.AppendData(rc)
 			if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
 				m.logger.Error("Failed to publish message",
-					slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+					slog.String("message", fmt.Sprintf("%+v", aiMsg)),
 					slog.String(errLoggerKey, err.Error()))
 				return
 			}
@@ -379,25 +379,13 @@ func (m Main) chat(chatID string, messages []models.Message) {
 		contentIdx++
 		messages[len(messages)-1] = aiMsg
 	}
-	//
-	// rc := models.RenderContents(aiMsg.Contents, true)
-	// msg := sse.Message{
-	// 	Type: messagesSSEType,
-	// }
-	// msg.AppendData(rc)
-	// if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
-	// 	m.logger.Error("Failed to publish message",
-	// 		slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
-	// 		slog.String(errLoggerKey, err.Error()))
-	// 	return
-	// }
 }
 
 func (m Main) generateChatTitle(chatID string, message string) {
 	title, err := m.titleGenerator.GenerateTitle(context.Background(), message)
 	if err != nil {
 		m.logger.Error("Error generating chat title",
-			slog.String("msg", message),
+			slog.String("message", message),
 			slog.String(errLoggerKey, err.Error()))
 		return
 	}
