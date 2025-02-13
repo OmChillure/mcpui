@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yuin/goldmark"
+	highlighting "github.com/yuin/goldmark-highlighting"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/renderer/html"
 )
 
 // Chat represents a conversation container in the chat system. It provides basic identification and
@@ -68,9 +73,8 @@ const (
 	ContentTypeToolResult ContentType = "tool_result"
 )
 
-// RenderContents renders a slice of Content into a string. If withDetail is true, it will render the contents
-// of call tools input and result wrapped with <details> tags.
-func RenderContents(contents []Content, withDetail bool) string {
+// RenderContents renders contents into a markdown string.
+func RenderContents(contents []Content) (string, error) {
 	var sb strings.Builder
 	for _, content := range contents {
 		switch content.Type {
@@ -80,12 +84,9 @@ func RenderContents(contents []Content, withDetail bool) string {
 			}
 			sb.WriteString(content.Text)
 		case ContentTypeCallTool:
-			sb.WriteString("  \n\n")
-			sb.WriteString(fmt.Sprintf("Calling Tool: %s  \n", content.ToolName))
-			if withDetail {
-				sb.WriteString("<details>  \n\n")
-			}
-			sb.WriteString("Input:  \n")
+			sb.WriteString("\n<details>\n")
+			sb.WriteString(fmt.Sprintf("<summary>Calling Tool: %s</summary>\n\n", content.ToolName))
+			sb.WriteString("Input:\n")
 
 			var prettyJSON bytes.Buffer
 			input := string(content.ToolInput)
@@ -95,8 +96,8 @@ func RenderContents(contents []Content, withDetail bool) string {
 
 			sb.WriteString(fmt.Sprintf("```json  \n%s  \n```  \n", input))
 		case ContentTypeToolResult:
-			sb.WriteString("  \n\n")
-			sb.WriteString("Result:  \n")
+			sb.WriteString("\n\n")
+			sb.WriteString("Result:\n")
 
 			var prettyJSON bytes.Buffer
 			result := string(content.ToolResult)
@@ -104,12 +105,27 @@ func RenderContents(contents []Content, withDetail bool) string {
 				result = prettyJSON.String()
 			}
 			sb.WriteString(fmt.Sprintf("```json  \n%s  \n```  \n", result))
-			if withDetail {
-				sb.WriteString("</details>  \n")
-			}
+			sb.WriteString("\n</details>\n\n")
 		}
 	}
-	return sb.String()
+	md := goldmark.New(
+		goldmark.WithExtensions(
+			extension.GFM,
+			highlighting.NewHighlighting(
+				highlighting.WithStyle("rose-pine"),
+			),
+		),
+		goldmark.WithRendererOptions(
+			html.WithUnsafe(), // To render details tag.
+		),
+	)
+
+	var buf bytes.Buffer
+	if err := md.Convert([]byte(sb.String()), &buf); err != nil {
+		return "", fmt.Errorf("failed to convert markdown: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // String returns a string representation of the Content.

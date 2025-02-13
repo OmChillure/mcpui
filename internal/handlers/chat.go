@@ -148,10 +148,18 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 			if messages[i].ID == aiMsgID {
 				streamingState = "loading"
 			}
+			content, err := models.RenderContents(messages[i].Contents)
+			if err != nil {
+				m.logger.Error("Failed to render contents",
+					slog.String("msg", fmt.Sprintf("%+v", messages[i])),
+					slog.String(errLoggerKey, err.Error()))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			msgs[i] = message{
 				ID:             messages[i].ID,
 				Role:           string(messages[i].Role),
-				Content:        models.RenderContents(messages[i].Contents, true),
+				Content:        content,
 				Timestamp:      messages[i].Timestamp,
 				StreamingState: streamingState,
 			}
@@ -168,10 +176,18 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userContent, err := models.RenderContents(um.Contents)
+	if err != nil {
+		m.logger.Error("Failed to render contents",
+			slog.String("msg", fmt.Sprintf("%+v", um)),
+			slog.String(errLoggerKey, err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	err = m.templates.ExecuteTemplate(w, "user_message", message{
 		ID:             userMsgID,
 		Role:           string(um.Role),
-		Content:        models.RenderContents(um.Contents, true),
+		Content:        userContent,
 		Timestamp:      um.Timestamp,
 		StreamingState: "ended",
 	})
@@ -180,10 +196,18 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	aiContent, err := models.RenderContents(am.Contents)
+	if err != nil {
+		m.logger.Error("Failed to render contents",
+			slog.String("msg", fmt.Sprintf("%+v", am)),
+			slog.String(errLoggerKey, err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	err = m.templates.ExecuteTemplate(w, "ai_message", message{
 		ID:             aiMsgID,
 		Role:           string(am.Role),
-		Content:        models.RenderContents(am.Contents, true),
+		Content:        aiContent,
 		Timestamp:      am.Timestamp,
 		StreamingState: "loading",
 	})
@@ -271,8 +295,13 @@ func (m Main) chat(chatID string, messages []models.Message) {
 				return
 			}
 
-			// TODO: find out why render markdown <details> tags is not working here.
-			rc := models.RenderContents(aiMsg.Contents, false)
+			rc, err := models.RenderContents(aiMsg.Contents)
+			if err != nil {
+				m.logger.Error("Failed to render contents",
+					slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+					slog.String(errLoggerKey, err.Error()))
+				return
+			}
 			m.logger.Debug("Render contents",
 				slog.String("origMsg", fmt.Sprintf("%+v", aiMsg.Contents)),
 				slog.String("renderedMsg", rc))
@@ -350,6 +379,18 @@ func (m Main) chat(chatID string, messages []models.Message) {
 		contentIdx++
 		messages[len(messages)-1] = aiMsg
 	}
+	//
+	// rc := models.RenderContents(aiMsg.Contents, true)
+	// msg := sse.Message{
+	// 	Type: messagesSSEType,
+	// }
+	// msg.AppendData(rc)
+	// if err := m.sseSrv.Publish(&msg, messageIDTopic(aiMsg.ID)); err != nil {
+	// 	m.logger.Error("Failed to publish message",
+	// 		slog.String("msg", fmt.Sprintf("%+v", aiMsg)),
+	// 		slog.String(errLoggerKey, err.Error()))
+	// 	return
+	// }
 }
 
 func (m Main) generateChatTitle(chatID string, message string) {

@@ -66,7 +66,14 @@ func (m Main) HandleHome(w http.ResponseWriter, r *http.Request) {
 		}
 		messages = make([]message, len(ms))
 		for i := range ms {
-			rc := models.RenderContents(ms[i].Contents, true)
+			rc, err := models.RenderContents(ms[i].Contents)
+			if err != nil {
+				m.logger.Error("Failed to render contents",
+					slog.String("msg", fmt.Sprintf("%+v", ms[i])),
+					slog.String(errLoggerKey, err.Error()))
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			m.logger.Debug("Render contents",
 				slog.String("origMsg", fmt.Sprintf("%+v", ms[i].Contents)),
 				slog.String("renderedMsg", rc))
