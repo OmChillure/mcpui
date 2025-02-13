@@ -114,13 +114,23 @@ func (o OpenRouter) Chat(
 		}
 		defer resp.Body.Close()
 
+		toolUse := false
+		toolArgs := ""
+		callToolContent := models.Content{
+			Type: models.ContentTypeCallTool,
+		}
 		for ev, err := range sse.Read(resp.Body, nil) {
 			if err != nil {
 				yield(models.Content{}, fmt.Errorf("error reading response: %w", err))
 				return
 			}
+
+			o.logger.Debug("Received event",
+				slog.String("event", ev.Data),
+			)
+
 			if ev.Data == "[DONE]" {
-				return
+				break
 			}
 
 			var res openRouterStreamingResponse
@@ -133,6 +143,7 @@ func (o OpenRouter) Chat(
 				continue
 			}
 			choice := res.Choices[0]
+
 			if len(choice.Delta.ToolCalls) > 0 {
 				if len(choice.Delta.ToolCalls) > 1 {
 					o.logger.Warn("Received multiples tool call, but only the first one is supported",
@@ -140,26 +151,33 @@ func (o OpenRouter) Chat(
 						slog.String("toolCalls", fmt.Sprintf("%+v", choice.Delta.ToolCalls)),
 					)
 				}
-				args := choice.Delta.ToolCalls[0].Function.Arguments
-				if args == "" {
-					args = "{}"
+				toolArgs += choice.Delta.ToolCalls[0].Function.Arguments
+				if !toolUse {
+					toolUse = true
+					callToolContent.ToolName = choice.Delta.ToolCalls[0].Function.Name
+					callToolContent.CallToolID = choice.Delta.ToolCalls[0].ID
 				}
-				yield(models.Content{
-					Type:       models.ContentTypeCallTool,
-					CallToolID: choice.Delta.ToolCalls[0].ID,
-					ToolName:   choice.Delta.ToolCalls[0].Function.Name,
-					ToolInput:  json.RawMessage(args),
-				}, nil)
-				return
 			}
+
 			if choice.Delta.Content != "" {
 				if !yield(models.Content{
 					Type: models.ContentTypeText,
 					Text: choice.Delta.Content,
 				}, nil) {
-					return
+					break
 				}
 			}
+		}
+		if toolUse {
+			if toolArgs == "" {
+				toolArgs = "{}"
+			}
+			o.logger.Debug("Call Tool",
+				slog.String("name", callToolContent.ToolName),
+				slog.String("args", toolArgs),
+			)
+			callToolContent.ToolInput = json.RawMessage(toolArgs)
+			yield(callToolContent, nil)
 		}
 	}
 }
