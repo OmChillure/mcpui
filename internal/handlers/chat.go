@@ -87,6 +87,12 @@ func (m Main) HandleChats(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		isNewChat = true
+	} else {
+		if err := m.continueChat(r.Context(), chatID); err != nil {
+			m.logger.Error("Failed to continue chat", slog.String(errLoggerKey, err.Error()))
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// We create two messages: user's input and a placeholder for AI response
@@ -243,6 +249,86 @@ func (m Main) newChat() (string, error) {
 	return newChat.ID, nil
 }
 
+// continueChat continues chat with given chatID.
+//
+// If the last content of the last message is not a CallTool type, it will do nothing.
+// But if it is, as it may happen due to the corrupted data, this function will call the tool,
+// then append the result to the chat.
+func (m Main) continueChat(ctx context.Context, chatID string) error {
+	messages, err := m.store.Messages(ctx, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to get messages: %w", err)
+	}
+
+	if len(messages) == 0 {
+		return nil
+	}
+
+	lastMessage := messages[len(messages)-1]
+
+	if lastMessage.Role != models.RoleAssistant {
+		return nil
+	}
+
+	if len(lastMessage.Contents) == 0 {
+		return nil
+	}
+
+	if lastMessage.Contents[len(lastMessage.Contents)-1].Type != models.ContentTypeCallTool {
+		return nil
+	}
+
+	toolRes, success := m.callTool(mcp.CallToolParams{
+		Name:      lastMessage.Contents[len(lastMessage.Contents)-1].ToolName,
+		Arguments: lastMessage.Contents[len(lastMessage.Contents)-1].ToolInput,
+	})
+
+	lastMessage.Contents = append(lastMessage.Contents, models.Content{
+		Type:       models.ContentTypeToolResult,
+		CallToolID: lastMessage.Contents[len(lastMessage.Contents)-1].CallToolID,
+	})
+
+	lastMessage.Contents[len(lastMessage.Contents)-1].ToolResult = toolRes
+	lastMessage.Contents[len(lastMessage.Contents)-1].CallToolFailed = !success
+
+	err = m.store.UpdateMessage(ctx, chatID, lastMessage)
+	if err != nil {
+		return fmt.Errorf("failed to update message: %w", err)
+	}
+
+	return nil
+}
+
+func (m Main) callTool(params mcp.CallToolParams) (json.RawMessage, bool) {
+	clientIdx, ok := m.toolsMap[params.Name]
+	if !ok {
+		m.logger.Error("Tool not found", slog.String("toolName", params.Name))
+		return callToolError(fmt.Errorf("tool %s is not found", params.Name)), false
+	}
+
+	toolRes, err := m.mcpClients[clientIdx].CallTool(context.Background(), params)
+	if err != nil {
+		m.logger.Error("Tool call failed",
+			slog.String("toolName", params.Name),
+			slog.String(errLoggerKey, err.Error()))
+		return callToolError(fmt.Errorf("tool call failed: %w", err)), false
+	}
+
+	resContent, err := json.Marshal(toolRes.Content)
+	if err != nil {
+		m.logger.Error("Failed to marshal tool result content",
+			slog.String("toolName", params.Name),
+			slog.String(errLoggerKey, err.Error()))
+		return callToolError(fmt.Errorf("failed to marshal content: %w", err)), false
+	}
+
+	m.logger.Debug("Tool result content",
+		slog.String("toolName", params.Name),
+		slog.String("toolResult", string(resContent)))
+
+	return resContent, !toolRes.IsError
+}
+
 func (m Main) chat(chatID string, messages []models.Message) {
 	// Ensure SSE connection cleanup on function exit
 	defer func() {
@@ -341,17 +427,6 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			CallToolID: callToolContent.CallToolID,
 		}
 
-		clientIdx, ok := m.toolsMap[callToolContent.ToolName]
-		if !ok {
-			m.logger.Error("Tool not found", slog.String("toolName", callToolContent.ToolName))
-			toolResContent.ToolResult = callToolError(fmt.Errorf("tool %s is not found", callToolContent.ToolName))
-			toolResContent.CallToolFailed = true
-			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
-			contentIdx++
-			messages[len(messages)-1] = aiMsg
-			continue
-		}
-
 		if badToolInputFlag {
 			toolResContent.ToolResult = callToolError(fmt.Errorf("tool input %s is not valid json", string(badToolInput)))
 			toolResContent.CallToolFailed = true
@@ -361,41 +436,13 @@ func (m Main) chat(chatID string, messages []models.Message) {
 			continue
 		}
 
-		toolRes, err := m.mcpClients[clientIdx].CallTool(context.Background(), mcp.CallToolParams{
+		toolResult, success := m.callTool(mcp.CallToolParams{
 			Name:      callToolContent.ToolName,
 			Arguments: callToolContent.ToolInput,
 		})
-		if err != nil {
-			m.logger.Error("Tool call failed",
-				slog.String("toolName", callToolContent.ToolName),
-				slog.String(errLoggerKey, err.Error()))
-			toolResContent.ToolResult = callToolError(fmt.Errorf("tool call failed: %w", err))
-			toolResContent.CallToolFailed = true
-			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
-			contentIdx++
-			messages[len(messages)-1] = aiMsg
-			continue
-		}
 
-		resContent, err := json.Marshal(toolRes.Content)
-		if err != nil {
-			m.logger.Error("Failed to marshal tool result content",
-				slog.String("toolName", callToolContent.ToolName),
-				slog.String(errLoggerKey, err.Error()))
-			toolResContent.ToolResult = callToolError(fmt.Errorf("failed to marshal content: %w", err))
-			toolResContent.CallToolFailed = true
-			aiMsg.Contents = append(aiMsg.Contents, toolResContent)
-			contentIdx++
-			messages[len(messages)-1] = aiMsg
-			continue
-		}
-
-		m.logger.Debug("Tool result content",
-			slog.String("toolName", callToolContent.ToolName),
-			slog.String("toolResult", string(resContent)))
-
-		toolResContent.ToolResult = resContent
-		toolResContent.CallToolFailed = toolRes.IsError
+		toolResContent.ToolResult = toolResult
+		toolResContent.CallToolFailed = !success
 		aiMsg.Contents = append(aiMsg.Contents, toolResContent)
 		contentIdx++
 		messages[len(messages)-1] = aiMsg
