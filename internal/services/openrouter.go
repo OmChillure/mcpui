@@ -69,8 +69,20 @@ type openRouterStreamingResponse struct {
 	Choices []openRouterStreamingChoice `json:"choices"`
 }
 
+type openRouterStreamingErrorResponse struct {
+	Error openRouterStreamingError `json:"error"`
+}
+
 type openRouterStreamingChoice struct {
-	Delta openRouterMessage `json:"delta"`
+	Delta              openRouterMessage `json:"delta"`
+	FinishReason       string            `json:"finish_reason"`
+	NativeFinishReason string            `json:"native_finish_reason"`
+}
+
+type openRouterStreamingError struct {
+	Code     int            `json:"code"`
+	Message  string         `json:"message"`
+	Metadata map[string]any `json:"metadata"`
 }
 
 type openRouterResponse struct {
@@ -134,6 +146,19 @@ func (o OpenRouter) Chat(
 				break
 			}
 
+			// Before we try to unmarshall response to the expected format, we try to unmarshall it to
+			// the streaming error format.
+			var resErr openRouterStreamingErrorResponse
+			if err := json.Unmarshal([]byte(ev.Data), &resErr); err == nil {
+				if resErr.Error.Code != 0 {
+					o.logger.Error("Received streaming error response",
+						slog.String("error", fmt.Sprintf("%+v", resErr)),
+					)
+					yield(models.Content{}, fmt.Errorf("openrouter error: %+v", resErr.Error))
+					return
+				}
+			}
+
 			var res openRouterStreamingResponse
 			if err := json.Unmarshal([]byte(ev.Data), &res); err != nil {
 				yield(models.Content{}, fmt.Errorf("error unmarshaling response: %w", err))
@@ -143,6 +168,7 @@ func (o OpenRouter) Chat(
 			if len(res.Choices) == 0 {
 				continue
 			}
+
 			choice := res.Choices[0]
 
 			if len(choice.Delta.ToolCalls) > 0 {
