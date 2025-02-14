@@ -84,7 +84,7 @@ func RenderContents(contents []Content) (string, error) {
 			}
 			sb.WriteString(content.Text)
 		case ContentTypeCallTool:
-			sb.WriteString("\n<details>\n")
+			sb.WriteString("\n\n<details>\n")
 			sb.WriteString(fmt.Sprintf("<summary>Calling Tool: %s</summary>\n\n", content.ToolName))
 			sb.WriteString("Input:\n")
 
@@ -94,7 +94,7 @@ func RenderContents(contents []Content) (string, error) {
 				input = prettyJSON.String()
 			}
 
-			sb.WriteString(fmt.Sprintf("```json  \n%s  \n```  \n", input))
+			sb.WriteString(fmt.Sprintf("```json\n%s\n```\n", input))
 		case ContentTypeToolResult:
 			sb.WriteString("\n\n")
 			sb.WriteString("Result:\n")
@@ -104,7 +104,7 @@ func RenderContents(contents []Content) (string, error) {
 			if err := json.Indent(&prettyJSON, content.ToolResult, "", "  "); err == nil {
 				result = prettyJSON.String()
 			}
-			sb.WriteString(fmt.Sprintf("```json  \n%s  \n```  \n", result))
+			sb.WriteString(fmt.Sprintf("```json\n%s\n```\n", result))
 			sb.WriteString("\n</details>\n\n")
 		}
 	}
