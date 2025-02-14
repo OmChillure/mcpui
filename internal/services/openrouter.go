@@ -62,7 +62,7 @@ type openRouterTool struct {
 type openRouterToolFunction struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
 }
 
 type openRouterStreamingResponse struct {
@@ -296,12 +296,26 @@ func (o OpenRouter) doRequest(
 
 	oTools := make([]openRouterTool, len(tools))
 	for i, tool := range tools {
+		parameters := tool.InputSchema
+		// Check if parameters represent an empty object
+		// This is required for some Google models, as if we don't do this, the model would return
+		// bad request error (http 400), with message something like:
+		// GenerateContentRequest.parameters.properties: should be non-empty for OBJECT type
+		if len(parameters) > 0 {
+			var obj map[string]interface{}
+			if err := json.Unmarshal(parameters, &obj); err == nil {
+				if props, ok := obj["properties"].(map[string]interface{}); ok && len(props) == 0 {
+					parameters = nil
+				}
+			}
+		}
+
 		oTools[i] = openRouterTool{
 			Type: "function",
 			Function: openRouterToolFunction{
 				Name:        tool.Name,
 				Description: tool.Description,
-				Parameters:  tool.InputSchema,
+				Parameters:  parameters,
 			},
 		}
 	}
