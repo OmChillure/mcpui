@@ -84,7 +84,7 @@ func RenderContents(contents []Content) (string, error) {
 			}
 			sb.WriteString(content.Text)
 		case ContentTypeCallTool:
-			sb.WriteString("\n\n<details>\n")
+			sb.WriteString("  \n\n<details>\n")
 			sb.WriteString(fmt.Sprintf("<summary>Calling Tool: %s</summary>\n\n", content.ToolName))
 			sb.WriteString("Input:\n")
 
@@ -105,7 +105,7 @@ func RenderContents(contents []Content) (string, error) {
 				result = prettyJSON.String()
 			}
 			sb.WriteString(fmt.Sprintf("```json\n%s\n```\n", result))
-			sb.WriteString("\n</details>\n\n")
+			sb.WriteString("\n</details>  \n\n")
 		}
 	}
 	md := goldmark.New(

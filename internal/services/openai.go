@@ -121,7 +121,10 @@ func (o OpenAI) Chat(
 			Tools:    oTools,
 		}
 
-		o.logger.Debug("Request", slog.String("req", fmt.Sprintf("%+v", req)))
+		reqJSON, err := json.Marshal(req)
+		if err == nil {
+			o.logger.Debug("Request", slog.String("req", string(reqJSON)))
+		}
 
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()

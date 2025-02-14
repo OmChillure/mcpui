@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/MegaGrindStone/go-mcp"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
@@ -153,9 +154,10 @@ func (o OpenRouter) Chat(
 				}
 				toolArgs += choice.Delta.ToolCalls[0].Function.Arguments
 				if !toolUse {
+					toolID := fmt.Sprintf("%s-%d", choice.Delta.ToolCalls[0].ID, time.Now().UnixMilli())
 					toolUse = true
 					callToolContent.ToolName = choice.Delta.ToolCalls[0].Function.Name
-					callToolContent.CallToolID = choice.Delta.ToolCalls[0].ID
+					callToolContent.CallToolID = toolID
 				}
 			}
 
@@ -285,12 +287,12 @@ func (o OpenRouter) doRequest(
 		Tools:    oTools,
 	}
 
-	o.logger.Debug("Request Body", slog.String("body", fmt.Sprintf("%+v", reqBody)))
-
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %w", err)
 	}
+
+	o.logger.Debug("Request Body", slog.String("body", string(jsonBody)))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		openRouterAPIEndpoint+"/chat/completions", bytes.NewBuffer(jsonBody))
