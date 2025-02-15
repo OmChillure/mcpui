@@ -7,6 +7,25 @@ titleGeneratorPrompt: Generate a title for this chat with only one sentence with
 llm:
   provider: ollama
   model: claude-3-5-sonnet-20241022
+  parameters: # This is optional, and only used by some LLM providers.
+    temperature: 0.5
+    topP: 0.9
+    topK: 40
+    frequencyPenalty: 0.0
+    presencePenalty: 0.0
+    repetitionPenalty: 1.0
+    minP: 0.0
+    topA: 0.0
+    seed: 0
+    maxTokens: 1000
+    logitBias: 
+      dummyTokenID: 0.0
+    logprobs: true
+    topLogprobs: 10
+    stop:
+      - "\n"
+      - "\n\n"
+    includeReasoning: true
   # ollama
   host: http://localhost:11434 # Default to environment variable OLLAMA_HOST
   # anthropic
@@ -21,6 +40,23 @@ genTitleLLM: # Default to the same LLM as the main LLM
   model: claude-3-5-sonnet-20241022
   apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
   maxTokens: 1000
+  parameters: # This is optional, and only used by some LLM providers.
+    temperature: 0.5
+    topP: 0.9
+    topK: 40
+    frequencyPenalty: 0.0
+    presencePenalty: 0.0
+    repetitionPenalty: 1.0
+    minP: 0.0
+    topA: 0.0
+    seed: 0
+    maxTokens: 1000
+    logprobs: true
+    topLogprobs: 10
+    stop:
+      - "\n"
+      - "\n\n"
+    includeReasoning: true
 mcpSSEServers:
   filesystem:
     url: https://yoursseserver.com

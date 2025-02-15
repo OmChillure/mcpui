@@ -24,6 +24,8 @@ type OpenRouter struct {
 	model        string
 	systemPrompt string
 
+	params LLMParameters
+
 	client *http.Client
 
 	logger *slog.Logger
@@ -34,6 +36,22 @@ type openRouterChatRequest struct {
 	Messages []openRouterMessage `json:"messages"`
 	Tools    []openRouterTool    `json:"tools,omitempty"`
 	Stream   bool                `json:"stream"`
+
+	Temperature       *float32       `json:"temperature,omitempty"`
+	TopP              *float32       `json:"top_p,omitempty"`
+	TopK              *int           `json:"top_k,omitempty"`
+	FrequencyPenalty  *float32       `json:"frequency_penalty,omitempty"`
+	PresencePenalty   *float32       `json:"presence_penalty,omitempty"`
+	RepetitionPenalty *float32       `json:"repetition_penalty,omitempty"`
+	MinP              *float32       `json:"min_p,omitempty"`
+	TopA              *float32       `json:"top_a,omitempty"`
+	Seed              *int           `json:"seed,omitempty"`
+	MaxTokens         *int           `json:"max_tokens,omitempty"`
+	LogitBias         map[string]int `json:"logit_bias,omitempty"`
+	Logprobs          *bool          `json:"logprobs,omitempty"`
+	TopLogprobs       *int           `json:"top_logprobs,omitempty"`
+	Stop              []string       `json:"stop,omitempty"`
+	IncludeReasoning  *bool          `json:"include_reasoning,omitempty"`
 }
 
 type openRouterMessage struct {
@@ -98,11 +116,12 @@ const (
 )
 
 // NewOpenRouter creates a new OpenRouter instance with the specified API key, model name, and system prompt.
-func NewOpenRouter(apiKey, model, systemPrompt string, logger *slog.Logger) OpenRouter {
+func NewOpenRouter(apiKey, model, systemPrompt string, params LLMParameters, logger *slog.Logger) OpenRouter {
 	return OpenRouter{
 		apiKey:       apiKey,
 		model:        model,
 		systemPrompt: systemPrompt,
+		params:       params,
 		client:       &http.Client{},
 		logger:       logger.With(slog.String("module", "openrouter")),
 	}
@@ -325,6 +344,22 @@ func (o OpenRouter) doRequest(
 		Messages: msgs,
 		Stream:   stream,
 		Tools:    oTools,
+
+		Temperature:       o.params.Temperature,
+		TopP:              o.params.TopP,
+		TopK:              o.params.TopK,
+		FrequencyPenalty:  o.params.FrequencyPenalty,
+		PresencePenalty:   o.params.PresencePenalty,
+		RepetitionPenalty: o.params.RepetitionPenalty,
+		MinP:              o.params.MinP,
+		TopA:              o.params.TopA,
+		Seed:              o.params.Seed,
+		MaxTokens:         o.params.MaxTokens,
+		LogitBias:         o.params.LogitBias,
+		Logprobs:          o.params.Logprobs,
+		TopLogprobs:       o.params.TopLogprobs,
+		Stop:              o.params.Stop,
+		IncludeReasoning:  o.params.IncludeReasoning,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)

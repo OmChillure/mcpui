@@ -17,8 +17,9 @@ type llmConfig interface {
 
 // BaseLLMConfig contains the common fields for all LLM configurations.
 type BaseLLMConfig struct {
-	Provider string `yaml:"provider"`
-	Model    string `yaml:"model"`
+	Provider   string                 `yaml:"provider"`
+	Model      string                 `yaml:"model"`
+	Parameters services.LLMParameters `yaml:"parameters"`
 }
 
 type config struct {
@@ -159,7 +160,7 @@ func (o ollamaConfig) newOllama(systemPrompt string, logger *slog.Logger) (servi
 	if host == "" {
 		host = os.Getenv("OLLAMA_HOST")
 	}
-	return services.NewOllama(host, o.Model, systemPrompt, logger), nil
+	return services.NewOllama(host, o.Model, systemPrompt, o.Parameters, logger), nil
 }
 
 func (o ollamaConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
@@ -182,7 +183,8 @@ func (a anthropicConfig) newAnthropic(systemPrompt string, _ *slog.Logger) (serv
 	if apiKey == "" {
 		apiKey = os.Getenv("ANTHROPIC_API_KEY")
 	}
-	return services.NewAnthropic(apiKey, a.Model, systemPrompt, a.MaxTokens), nil
+
+	return services.NewAnthropic(apiKey, a.Model, systemPrompt, a.MaxTokens, a.Parameters), nil
 }
 
 func (a anthropicConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
@@ -202,7 +204,7 @@ func (o openaiConfig) newOpenAI(systemPrompt string, logger *slog.Logger) (servi
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
-	return services.NewOpenAI(apiKey, o.Model, systemPrompt, logger), nil
+	return services.NewOpenAI(apiKey, o.Model, systemPrompt, o.Parameters, logger), nil
 }
 
 func (o openaiConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {
@@ -222,7 +224,7 @@ func (o openrouterConfig) newOpenRouter(systemPrompt string, logger *slog.Logger
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENROUTER_API_KEY")
 	}
-	return services.NewOpenRouter(apiKey, o.Model, systemPrompt, logger), nil
+	return services.NewOpenRouter(apiKey, o.Model, systemPrompt, o.Parameters, logger), nil
 }
 
 func (o openrouterConfig) llm(systemPrompt string, logger *slog.Logger) (handlers.LLM, error) {

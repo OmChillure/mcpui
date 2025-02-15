@@ -23,17 +23,23 @@ type Anthropic struct {
 	maxTokens    int
 	systemPrompt string
 
+	params LLMParameters
+
 	client *http.Client
 }
 
 type anthropicChatRequest struct {
-	Model       string             `json:"model"`
-	Messages    []anthropicMessage `json:"messages"`
-	System      string             `json:"system,omitempty"`
-	MaxTokens   int                `json:"max_tokens,omitempty"`
-	Tools       []anthropicTool    `json:"tools,omitempty"`
-	Temperature float64            `json:"temperature"`
-	Stream      bool               `json:"stream"`
+	Model     string             `json:"model"`
+	Messages  []anthropicMessage `json:"messages"`
+	System    string             `json:"system"`
+	MaxTokens int                `json:"max_tokens"`
+	Tools     []anthropicTool    `json:"tools"`
+	Stream    bool               `json:"stream"`
+
+	StopSequences []string `json:"stop_sequences,omitempty"`
+	Temperature   *float32 `json:"temperature,omitempty"`
+	TopK          *int     `json:"top_k,omitempty"`
+	TopP          *float32 `json:"top_p,omitempty"`
 }
 
 type anthropicMessage struct {
@@ -98,12 +104,13 @@ const (
 // NewAnthropic creates a new Anthropic instance with the specified API key, model name, and maximum
 // token limit. It initializes an HTTP client for API communication and returns a configured Anthropic
 // instance ready for chat interactions.
-func NewAnthropic(apiKey, model, systemPrompt string, maxTokens int) Anthropic {
+func NewAnthropic(apiKey, model, systemPrompt string, maxTokens int, params LLMParameters) Anthropic {
 	return Anthropic{
 		apiKey:       apiKey,
 		model:        model,
 		maxTokens:    maxTokens,
 		systemPrompt: systemPrompt,
+		params:       params,
 		client:       &http.Client{},
 	}
 }
@@ -309,10 +316,15 @@ func (a Anthropic) doRequest(
 	reqBody := anthropicChatRequest{
 		Model:     a.model,
 		Messages:  msgs,
-		Stream:    stream,
 		System:    a.systemPrompt,
 		MaxTokens: a.maxTokens,
 		Tools:     aTools,
+		Stream:    stream,
+
+		StopSequences: a.params.Stop,
+		Temperature:   a.params.Temperature,
+		TopK:          a.params.TopK,
+		TopP:          a.params.TopP,
 	}
 
 	jsonBody, err := json.Marshal(reqBody)

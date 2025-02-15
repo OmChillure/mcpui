@@ -23,6 +23,8 @@ type Ollama struct {
 	model        string
 	systemPrompt string
 
+	params LLMParameters
+
 	client *api.Client
 
 	logger *slog.Logger
@@ -31,7 +33,7 @@ type Ollama struct {
 // NewOllama creates a new Ollama instance with the specified host URL and model name. The host
 // parameter should be a valid URL pointing to an Ollama server. If the provided host URL is invalid,
 // the function will panic.
-func NewOllama(host, model, systemPrompt string, logger *slog.Logger) Ollama {
+func NewOllama(host, model, systemPrompt string, params LLMParameters, logger *slog.Logger) Ollama {
 	u, err := url.Parse(host)
 	if err != nil {
 		panic(err)
@@ -41,6 +43,7 @@ func NewOllama(host, model, systemPrompt string, logger *slog.Logger) Ollama {
 		host:         host,
 		model:        model,
 		systemPrompt: systemPrompt,
+		params:       params,
 		client:       api.NewClient(u, &http.Client{}),
 		logger:       logger.With(slog.String("module", "ollama")),
 	}
@@ -148,13 +151,7 @@ func (o Ollama) Chat(
 			oTools[i] = oTool
 		}
 
-		t := true
-		req := api.ChatRequest{
-			Model:    o.model,
-			Messages: msgs,
-			Stream:   &t,
-			Tools:    oTools,
-		}
+		req := o.chatRequest(msgs, oTools, true)
 
 		reqJSON, err := json.Marshal(req)
 		if err == nil {
@@ -218,12 +215,8 @@ func (o Ollama) GenerateTitle(ctx context.Context, message string) (string, erro
 			Content: message,
 		},
 	}
-	f := false
-	req := api.ChatRequest{
-		Model:    o.model,
-		Messages: msgs,
-		Stream:   &f,
-	}
+
+	req := o.chatRequest(msgs, nil, false)
 
 	var title string
 
@@ -235,4 +228,38 @@ func (o Ollama) GenerateTitle(ctx context.Context, message string) (string, erro
 	}
 
 	return title, nil
+}
+
+func (o Ollama) chatRequest(messages []api.Message, tools []api.Tool, stream bool) api.ChatRequest {
+	req := api.ChatRequest{
+		Model:    o.model,
+		Messages: messages,
+		Stream:   &stream,
+		Tools:    tools,
+	}
+
+	opts := make(map[string]interface{})
+
+	if o.params.Temperature != nil {
+		opts["temperature"] = *o.params.Temperature
+	}
+	if o.params.Seed != nil {
+		opts["seed"] = *o.params.Seed
+	}
+	if o.params.Stop != nil {
+		opts["stop"] = o.params.Stop
+	}
+	if o.params.TopK != nil {
+		opts["top_k"] = *o.params.TopK
+	}
+	if o.params.TopP != nil {
+		opts["top_p"] = *o.params.TopP
+	}
+	if o.params.MinP != nil {
+		opts["min_p"] = *o.params.MinP
+	}
+
+	req.Options = opts
+
+	return req
 }

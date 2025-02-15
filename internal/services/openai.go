@@ -20,16 +20,19 @@ type OpenAI struct {
 	model        string
 	systemPrompt string
 
+	params LLMParameters
+
 	client *goopenai.Client
 
 	logger *slog.Logger
 }
 
 // NewOpenAI creates a new OpenAI instance with the specified API key, base URL, model name, and system prompt.
-func NewOpenAI(apiKey, model, systemPrompt string, logger *slog.Logger) OpenAI {
+func NewOpenAI(apiKey, model, systemPrompt string, params LLMParameters, logger *slog.Logger) OpenAI {
 	return OpenAI{
 		model:        model,
 		systemPrompt: systemPrompt,
+		params:       params,
 		client:       goopenai.NewClient(apiKey),
 		logger:       logger.With(slog.String("module", "openai")),
 	}
@@ -114,12 +117,7 @@ func (o OpenAI) Chat(
 			}
 		}
 
-		req := goopenai.ChatCompletionRequest{
-			Model:    o.model,
-			Messages: msgs,
-			Stream:   true,
-			Tools:    oTools,
-		}
+		req := o.chatRequest(msgs, oTools, true)
 
 		reqJSON, err := json.Marshal(req)
 		if err == nil {
@@ -207,13 +205,10 @@ func (o OpenAI) GenerateTitle(ctx context.Context, message string) (string, erro
 			Content: message,
 		},
 	}
-	resp, err := o.client.CreateChatCompletion(
-		ctx,
-		goopenai.ChatCompletionRequest{
-			Model:    o.model,
-			Messages: msgs,
-		},
-	)
+
+	req := o.chatRequest(msgs, nil, false)
+
+	resp, err := o.client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("error sending request: %w", err)
 	}
@@ -223,4 +218,47 @@ func (o OpenAI) GenerateTitle(ctx context.Context, message string) (string, erro
 	}
 
 	return resp.Choices[0].Message.Content, nil
+}
+
+func (o OpenAI) chatRequest(
+	messages []goopenai.ChatCompletionMessage,
+	tools []goopenai.Tool,
+	stream bool,
+) goopenai.ChatCompletionRequest {
+	req := goopenai.ChatCompletionRequest{
+		Model:    o.model,
+		Messages: messages,
+		Stream:   stream,
+		Tools:    tools,
+	}
+
+	if o.params.Temperature != nil {
+		req.Temperature = *o.params.Temperature
+	}
+	if o.params.TopP != nil {
+		req.TopP = *o.params.TopP
+	}
+	if o.params.Stop != nil {
+		req.Stop = o.params.Stop
+	}
+	if o.params.PresencePenalty != nil {
+		req.PresencePenalty = *o.params.PresencePenalty
+	}
+	if o.params.Seed != nil {
+		req.Seed = o.params.Seed
+	}
+	if o.params.FrequencyPenalty != nil {
+		req.FrequencyPenalty = *o.params.FrequencyPenalty
+	}
+	if o.params.LogitBias != nil {
+		req.LogitBias = o.params.LogitBias
+	}
+	if o.params.Logprobs != nil {
+		req.LogProbs = *o.params.Logprobs
+	}
+	if o.params.TopLogprobs != nil {
+		req.TopLogProbs = *o.params.TopLogprobs
+	}
+
+	return req
 }
