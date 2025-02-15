@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"time"
 
 	"github.com/MegaGrindStone/go-mcp"
 	"github.com/MegaGrindStone/mcp-web-ui/internal/models"
@@ -199,10 +198,9 @@ func (o OpenRouter) Chat(
 				}
 				toolArgs += choice.Delta.ToolCalls[0].Function.Arguments
 				if !toolUse {
-					toolID := fmt.Sprintf("%s-%d", choice.Delta.ToolCalls[0].ID, time.Now().UnixMilli())
 					toolUse = true
 					callToolContent.ToolName = choice.Delta.ToolCalls[0].Function.Name
-					callToolContent.CallToolID = toolID
+					callToolContent.CallToolID = choice.Delta.ToolCalls[0].ID
 				}
 			}
 
