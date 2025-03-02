@@ -56,7 +56,8 @@ type openrouterConfig struct {
 }
 
 type mcpSSEServerConfig struct {
-	URL string `yaml:"url"`
+	URL            string `yaml:"url"`
+	MaxPayloadSize int    `yaml:"maxPayloadSize"`
 }
 
 type mcpStdIOServerConfig struct {

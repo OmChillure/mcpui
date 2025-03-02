@@ -60,6 +60,7 @@ genTitleLLM: # Default to the same LLM as the main LLM
 mcpSSEServers:
   filesystem:
     url: https://yoursseserver.com
+    maxPayloadSize: 1048576 # 1MB
 mcpStdIOServers:
   filesystem:
     command: npx

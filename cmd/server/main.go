@@ -247,7 +247,8 @@ func populateMCPClients(cfg config, mcpClientInfo mcp.Info) ([]*mcp.Client, []*e
 	var mcpClients []*mcp.Client
 
 	for _, mcpSSEServerConfig := range cfg.MCPSSEServers {
-		sseClient := mcp.NewSSEClient(mcpSSEServerConfig.URL, nil)
+		sseClient := mcp.NewSSEClient(mcpSSEServerConfig.URL, nil,
+			mcp.WithSSEClientMaxPayloadSize(mcpSSEServerConfig.MaxPayloadSize))
 		cli := mcp.NewClient(mcpClientInfo, sseClient)
 		mcpClients = append(mcpClients, cli)
 	}
