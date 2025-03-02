@@ -57,27 +57,17 @@ func main() {
 
 	mcpClients, stdIOCmds := populateMCPClients(cfg, mcpClientInfo)
 
-	var mcpCancels []context.CancelFunc
 	for i, cli := range mcpClients {
 		logger.Info("Connecting to MCP server", slog.Int("index", i))
 
-		connectCtx, connectCancel := context.WithCancel(context.Background())
-		mcpCancels = append(mcpCancels, connectCancel)
+		connectCtx, connectCancel := context.WithTimeout(context.Background(), 30*time.Second)
 
-		ready := make(chan struct{})
-		errs := make(chan error, 1)
-
-		go func() {
-			if err := cli.Connect(connectCtx, ready); err != nil {
-				errs <- err
-			}
-		}()
-
-		select {
-		case err := <-errs:
+		if err := cli.Connect(connectCtx); err != nil {
+			connectCancel()
 			logger.Error("Error connecting to MCP server", slog.Int("index", i), slog.String("err", err.Error()))
-		case <-ready:
+			continue
 		}
+		connectCancel()
 
 		mcpClients[i] = cli
 
@@ -112,9 +102,14 @@ func main() {
 	}
 
 	srv.RegisterOnShutdown(func() {
-		for _, cancel := range mcpCancels {
-			cancel()
+		for _, cli := range mcpClients {
+			disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := cli.Disconnect(disconnectCtx); err != nil {
+				logger.Error("Failed to disconnect from MCP server", slog.String("err", err.Error()))
+			}
+			disconnectCancel()
 		}
+
 		for _, cmd := range stdIOCmds {
 			if err := cmd.Process.Kill(); err != nil {
 				logger.Error("Failed to kill stdIO command", slog.String("err", err.Error()))
