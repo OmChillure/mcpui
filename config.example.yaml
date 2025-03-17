@@ -29,7 +29,7 @@ llm:
   # ollama
   host: http://localhost:11434 # Default to environment variable OLLAMA_HOST
   # anthropic
-  apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
+  apiKey: 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
   maxTokens: 1000
   # openai
   apiKey: YOUR_API_KEY # Default to environment variable OPENAI_API_KEY
@@ -38,7 +38,7 @@ llm:
 genTitleLLM: # Default to the same LLM as the main LLM
   provider: anthropic
   model: claude-3-5-sonnet-20241022
-  apiKey: YOUR_API_KEY # Default to environment variable ANTHROPIC_API_KEY
+  apiKey: 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 # Default to environment variable ANTHROPIC_API_KEY
   maxTokens: 1000
   parameters: # This is optional, and only used by some LLM providers.
     temperature: 0.5
